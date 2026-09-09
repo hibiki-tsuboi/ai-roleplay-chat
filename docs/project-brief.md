@@ -68,6 +68,8 @@ ai-roleplay-chat/
 
 チャット履歴は、MVPでは基本的にiPhone端末内へ保存する。
 
+会話開始時にOpenAI / Geminiを選択し、その会話の接続先を履歴とともに保存する。会話を再開するときも同じAIを使う。モデル名とAPI Keyはバックエンドで管理する。
+
 ### Backend
 
 Cloudflare Workersを利用する予定。

@@ -24,7 +24,7 @@ docs/
 
 - iOS にはシナリオからの会話開始、メッセージ送受信、送信中表示、失敗時の再送、会話履歴の再表示・削除を実装しています。
 - バックエンドには `GET /health` と `POST /v1/chat`、シナリオのプロンプト、入力検証、エラー処理を用意しています。
-- AI の接続先は OpenAI と Gemini を切り替えられます。Gemini はローカルで `gemini-3.5-flash-lite` を試用できます。
+- 会話を始める画面で OpenAI / Gemini を選び、履歴から再開するときも同じ AI を使えます。Gemini はローカルで `gemini-3.5-flash-lite` を試用できます。
 - Cloudflare の開発用バックエンドはデプロイ済みです。開発用トークンと連続送信の制限を設けています。接続・デプロイ手順は [Cloudflare 開発環境](docs/cloudflare.md) を参照してください。
 - 会話履歴は SwiftData で iPhone 内に保存します。バックエンド DB・認証・同期・課金は未実装です。
 
@@ -40,7 +40,7 @@ cp .dev.vars.example .dev.vars
 npm run dev
 ```
 
-Gemini を使う場合は `.dev.vars` の `AI_PROVIDER=gemini`、`GEMINI_API_KEY`、`GEMINI_MODEL=gemini-3.5-flash-lite` を設定します。切り替えたらサーバーを再起動してください。手順は [開発ガイド](docs/development.md#モデルの切り替え) を参照してください。
+アプリで両方の AI を使う場合は `.dev.vars` に `OPENAI_API_KEY`、`GEMINI_API_KEY`、`GEMINI_MODEL=gemini-3.5-flash-lite` を設定して再起動します。アプリでの選択を優先し、`AI_PROVIDER` は接続先を省略したリクエストの既定値として使います。手順は [開発ガイド](docs/development.md#モデルの切り替え) を参照してください。
 
 別ターミナルで確認します。ヘルスチェックは API キーなしでも動作します。
 
@@ -54,7 +54,7 @@ curl http://localhost:8787/health
 
 Xcode で `ios/AIRoleplayChat.xcodeproj` を開き、`AIRoleplayChat` スキームと iPhone Simulator を選んで実行します。現在のプロジェクトの対象 OS は iOS 26.5 以降です。実機では Signing & Capabilities の Team を各自の環境に合わせてください。
 
-Debug ビルドの接続先は `http://localhost:8787` です。Mac 上でバックエンドを起動したまま、アプリで「会話を始める」を押してメッセージを送信します。ホームの履歴から、再起動後も会話を続けられます。
+Debug ビルドの接続先は `http://localhost:8787` です。Mac 上でバックエンドを起動したまま、アプリで「会話する AI」を選び、「会話を始める」を押します。次の新規会話には前回の選択を使い、履歴からはその会話に保存された AI で再開します。AI 選択に対応したバックエンドが必要です。
 
 `AIRoleplayChat` スキームで `⌘U` を押すと、保存・通信・再送の単体テストを実行します。テストは実際の AI に接続しません。画面操作テストや実機接続の手順は [開発ガイド](docs/development.md) に記載しています。
 

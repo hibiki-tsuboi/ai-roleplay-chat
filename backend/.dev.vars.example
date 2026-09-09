@@ -1,7 +1,8 @@
 # Copy to .dev.vars and set the selected provider's key. Never commit .dev.vars.
+# Default for requests without a provider; the app selects one per conversation.
 AI_PROVIDER=openai
 OPENAI_API_KEY=
 
-# Set AI_PROVIDER=gemini to try Gemini locally; restart npm run dev after changes.
+# Gemini credentials for app selection. Restart npm run dev after changes.
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-3.5-flash-lite

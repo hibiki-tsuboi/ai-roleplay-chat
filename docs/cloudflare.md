@@ -62,6 +62,8 @@ unset ROLEPLAY_DEV_ACCESS_TOKEN
 
 ## iOS から接続
 
+アプリの AI 選択に対応したコードは、現在の Cloudflare にはまだデプロイしていません。最新アプリで使うにはバックエンドの更新が必要です。旧バックエンドは応答に `provider` を返さないため、選択した AI を確認できずアプリ側でエラーになります。Gemini を公開環境で使うには、別途 `GEMINI_MODEL` の設定と `GEMINI_API_KEY` の Secret 登録も必要です。
+
 Xcode の Manage Schemes で `AIRoleplayChat` を複製し、`CloudflareDev` などの名前にして Shared をオフにします。その個人用スキームの Edit Scheme → Run → Arguments → Environment Variables に以下を追加します。トークンを含むスキームは共有・コミットしないでください。
 
 | 名前 | 値 |

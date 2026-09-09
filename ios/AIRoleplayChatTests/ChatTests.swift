@@ -23,6 +23,21 @@ private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     override func stopLoading() {}
 }
 
+private func jsonBody(of request: URLRequest) throws -> [String: Any] {
+    var data = request.httpBody ?? Data()
+    if data.isEmpty, let stream = request.httpBodyStream {
+        stream.open()
+        defer { stream.close() }
+        var buffer = [UInt8](repeating: 0, count: 1_024)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            guard count > 0 else { break }
+            data.append(contentsOf: buffer.prefix(count))
+        }
+    }
+    return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+}
+
 @Suite(.serialized)
 @MainActor
 struct ChatTests {
@@ -52,6 +67,76 @@ struct ChatTests {
         let json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
         #expect(json["scenarioId"] as? String == "late-report")
         #expect(json["scenarioID"] == nil)
+        #expect(json["provider"] == nil)
+    }
+
+    @Test(arguments: [AIProvider.openai, .gemini])
+    func selectedProviderIsSentAndPreservedForEveryTurn(provider: AIProvider) async throws {
+        let store = try container()
+        let context = ModelContext(store)
+        let conversation = Conversation(provider: provider)
+        context.insert(conversation)
+        try context.save()
+        StubURLProtocol.handler = { request in
+            let json = try jsonBody(of: request)
+            #expect(json["provider"] as? String == provider.rawValue)
+            #expect(json["model"] == nil)
+            return (200, try JSONSerialization.data(withJSONObject: [
+                "provider": provider.rawValue,
+                "message": ["role": "assistant", "content": "あと少しです。"],
+            ]))
+        }
+        let session = ChatSession(conversation: conversation, context: context, api: client())
+        session.draft = "資料はできた？"
+        await session.send()
+        let resumed = ChatSession(conversation: conversation, context: context, api: client())
+        resumed.draft = "何か手伝える？"
+        await resumed.send()
+        #expect(session.errorMessage == nil)
+        #expect(resumed.errorMessage == nil)
+        #expect(conversation.messages.count == 4)
+        #expect(conversation.provider == provider)
+    }
+
+    @Test(arguments: ["openai", "missing"])
+    func mismatchedOrMissingProviderDoesNotSaveTurn(returnedProvider: String) async throws {
+        let store = try container()
+        let context = ModelContext(store)
+        let conversation = Conversation(provider: .gemini)
+        context.insert(conversation)
+        try context.save()
+        StubURLProtocol.handler = { _ in
+            var json: [String: Any] = ["message": ["role": "assistant", "content": "あと少しです。"]]
+            if returnedProvider != "missing" { json["provider"] = returnedProvider }
+            return (200, try JSONSerialization.data(withJSONObject: json))
+        }
+        let session = ChatSession(conversation: conversation, context: context, api: client())
+        session.draft = "資料はできた？"
+        await session.send()
+        #expect(session.errorMessage == ChatAPIError.providerMismatch.localizedDescription)
+        #expect(session.draft == "資料はできた？")
+        #expect(conversation.messages.isEmpty)
+        #expect(conversation.provider == .gemini)
+    }
+
+    @Test func legacyConversationRecordsConfirmedProviderAfterSuccessfulReply() async throws {
+        let store = try container()
+        let context = ModelContext(store)
+        let conversation = Conversation()
+        context.insert(conversation)
+        try context.save()
+        #expect(conversation.provider == nil)
+        StubURLProtocol.handler = { request in
+            let json = try jsonBody(of: request)
+            #expect(json["provider"] == nil)
+            return (200, Data(#"{"provider":"gemini","message":{"role":"assistant","content":"あと少しです。"}}"#.utf8))
+        }
+        let session = ChatSession(conversation: conversation, context: context, api: client())
+        session.draft = "資料はできた？"
+        await session.send()
+        #expect(session.errorMessage == nil)
+        #expect(conversation.provider == .gemini)
+        #expect(conversation.messages.count == 2)
     }
 
     @Test func requestUsesUTF16BudgetAndDoesNotMutateHistory() throws {
@@ -68,7 +153,8 @@ struct ChatTests {
         }
     }
 
-    @Test func conversationSurvivesStoreReopeningAndPreservesOrder() throws {
+    @Test(arguments: [AIProvider.openai, .gemini])
+    func conversationSurvivesStoreReopeningAndPreservesOrder(provider: AIProvider) throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -76,7 +162,7 @@ struct ChatTests {
         do {
             let store = try container(url: url)
             let context = ModelContext(store)
-            let conversation = Conversation()
+            let conversation = Conversation(provider: provider)
             context.insert(conversation)
             conversation.appendTurn(userText: "進み具合は？", reply: "半分まで終わっています。")
             conversation.appendTurn(userText: "何か困っている？", reply: "集計を手伝っていただけると助かります。")
@@ -86,6 +172,7 @@ struct ChatTests {
         let context = ModelContext(reopened)
         let saved = try #require(context.fetch(FetchDescriptor<Conversation>()).first)
         #expect(saved.scenarioID == "late-report")
+        #expect(saved.provider == provider)
         #expect(saved.sortedMessages.map(\.content) == ["進み具合は？", "半分まで終わっています。", "何か困っている？", "集計を手伝っていただけると助かります。"])
         #expect(saved.sortedMessages.map(\.role) == [.user, .assistant, .user, .assistant])
         #expect(saved.messages.allSatisfy { $0.conversation?.id == saved.id })
@@ -114,7 +201,7 @@ struct ChatTests {
         }
         let request = try ChatRequest(scenarioID: "late-report", history: [], text: "状況は？")
         let reply = try await client().send(request)
-        #expect(reply == APIMessage(role: .assistant, content: "すみません。"))
+        #expect(reply.message == APIMessage(role: .assistant, content: "すみません。"))
     }
 
     #if DEBUG
@@ -128,7 +215,7 @@ struct ChatTests {
         api.baseURL = URL(string: "https://example.test")
         api.developmentAccessToken = "development-test-token"
         let request = try ChatRequest(scenarioID: "late-report", history: [], text: "状況は？")
-        #expect(try await api.send(request).content == "すみません。")
+        #expect(try await api.send(request).message.content == "すみません。")
     }
 
     @Test func developmentTokenCannotBeSentOverHTTP() async throws {

@@ -119,6 +119,7 @@ describe("OpenAI proxy", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(await response.json()).toEqual({
+      provider: "openai",
       message: { role: "assistant", content: "すみません、集計に時間がかかっています。" },
     });
     expect(fetch).toHaveBeenCalledOnce();

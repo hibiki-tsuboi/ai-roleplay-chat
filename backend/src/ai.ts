@@ -1,4 +1,4 @@
-import { type ChatMessage, isRecord, maxMessageLength, scenarioInstructions } from "./chat";
+import { type AIProvider, type ChatMessage, isRecord, maxMessageLength, scenarioInstructions } from "./chat";
 
 export interface AIEnv {
   AI_PROVIDER?: string;
@@ -9,13 +9,13 @@ export interface AIEnv {
 }
 
 interface AIConfig {
-  provider: "openai" | "gemini";
+  provider: AIProvider;
   apiKey: string;
   model: string;
 }
 
-export function resolveAIConfig(env: AIEnv): AIConfig | null {
-  const provider = env.AI_PROVIDER ?? "openai";
+export function resolveAIConfig(env: AIEnv, selectedProvider?: AIProvider): AIConfig | null {
+  const provider = selectedProvider ?? env.AI_PROVIDER ?? "openai";
   if (provider !== "openai" && provider !== "gemini") return null;
   const apiKey = (provider === "gemini" ? env.GEMINI_API_KEY : env.OPENAI_API_KEY)?.trim();
   const model = (provider === "gemini" ? env.GEMINI_MODEL : env.OPENAI_MODEL)?.trim();

@@ -6,6 +6,7 @@ struct ContentView: View {
     @Query(sort: \Conversation.updatedAt, order: .reverse) private var conversations: [Conversation]
     @State private var path: [Conversation] = []
     @State private var errorMessage: String?
+    @AppStorage("preferredAIProvider") private var selectedProvider: AIProvider = .gemini
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -19,6 +20,17 @@ struct ContentView: View {
                             .font(.title2.bold())
                         Text(Scenario.lateReport.summary)
                             .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("会話する AI")
+                                .font(.subheadline.weight(.medium))
+                            Picker("会話する AI", selection: $selectedProvider) {
+                                ForEach(AIProvider.allCases) { provider in
+                                    Text(provider.displayName).tag(provider)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .accessibilityIdentifier("aiProviderPicker")
+                        }
                         Button("会話を始める", action: startConversation)
                             .buttonStyle(.borderedProminent)
                             .controlSize(.large)
@@ -28,7 +40,7 @@ struct ContentView: View {
                 } header: {
                     Text("シナリオ")
                 } footer: {
-                    Text("AI が演じる架空の部下との会話練習です。")
+                    Text("AI が演じる架空の部下との会話練習です。選んだ AI は、この会話の続きでも使います。")
                 }
 
                 Section("会話履歴") {
@@ -47,9 +59,15 @@ struct ContentView: View {
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)
-                                Text(conversation.updatedAt, format: .dateTime.month().day().hour().minute())
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 8) {
+                                    if let provider = conversation.provider {
+                                        Text(provider.displayName)
+                                            .fontWeight(.medium)
+                                    }
+                                    Text(conversation.updatedAt, format: .dateTime.month().day().hour().minute())
+                                }
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                             }
                             .padding(.vertical, 4)
                         }
@@ -77,7 +95,7 @@ struct ContentView: View {
     }
 
     private func startConversation() {
-        let conversation = Conversation()
+        let conversation = Conversation(provider: selectedProvider)
         modelContext.insert(conversation)
         do {
             try modelContext.save()

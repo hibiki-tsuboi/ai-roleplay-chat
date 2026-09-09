@@ -1,4 +1,4 @@
-// Local HTTP fixture for AIRoleplayChatUITests. Never calls OpenAI.
+// Local HTTP fixture for AIRoleplayChatUITests. Never calls a real AI service.
 import { createServer } from "node:http";
 
 let failNextRetry = true;
@@ -11,8 +11,9 @@ createServer(async (request, response) => {
     return;
   }
   try {
-    const { scenarioId, messages } = JSON.parse(Buffer.concat(chunks).toString());
+    const { scenarioId, messages, provider = "gemini" } = JSON.parse(Buffer.concat(chunks).toString());
     if (scenarioId !== "late-report" || messages.at(-1)?.role !== "user") throw new Error("Invalid request");
+    if (provider !== "openai" && provider !== "gemini") throw new Error("Invalid provider");
     if (messages.at(-1).content === "retry-once") {
       const fail = failNextRetry;
       failNextRetry = !failNextRetry;
@@ -24,10 +25,10 @@ createServer(async (request, response) => {
     const content = messages.length > 1
       ? "共有して一緒に確認していただけると助かります。"
       : "集計に時間がかかっています。";
-    response.end(JSON.stringify({ message: { role: "assistant", content } }));
+    response.end(JSON.stringify({ provider, message: { role: "assistant", content: `${provider === "openai" ? "OpenAI" : "Gemini"}: ${content}` } }));
   } catch {
     response.writeHead(400).end(JSON.stringify({ error: { code: "invalid_request", message: "Invalid request" } }));
   }
 }).listen(8788, "127.0.0.1", () => {
-  console.log("UI test mock listening on http://localhost:8788 (no OpenAI calls)");
+  console.log("UI test mock listening on http://localhost:8788 (no real AI calls)");
 });

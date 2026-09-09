@@ -44,17 +44,18 @@ curl http://localhost:8787/v1/chat \
 
 ### モデルの切り替え
 
-接続先は `.dev.vars` の `AI_PROVIDER` で選びます。既定は `openai` です。Gemini を試す場合は、既存のキーを残したまま次を設定します。
+アプリの「会話する AI」で OpenAI / Gemini を選択します。両方を使うには、既存の `OPENAI_API_KEY` を残したまま `.dev.vars` に次を設定してください。モデル名とキーはバックエンドだけで管理します。
 
 ```dotenv
-AI_PROVIDER=gemini
 GEMINI_API_KEY=取得したキー
 GEMINI_MODEL=gemini-3.5-flash-lite
 ```
 
-設定後は `npm run dev` を再起動します。同じ curl・iOS アプリで Gemini と会話できます。使用する接続先のキーとモデルだけが必要で、未設定・エラー時に他社の AI へ自動で切り替えません。
+設定後は `npm run dev` を再起動します。アプリから選ぶたびに再起動する必要はありません。選んだ AI の設定が不足している場合は503を返し、他社の AI へ自動で切り替えません。
 
-[Gemini 3.5 Flash-Lite](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite) は短い会話の試用向けに選択しています。このモデルのみ推論量を `minimal` に設定します。OpenAI に戻すには `.dev.vars` を `AI_PROVIDER=openai` に変更して再起動してください。
+curl でも JSON に `"provider":"gemini"` または `"provider":"openai"` を追加して選べます。省略時だけ `.dev.vars` の `AI_PROVIDER`（既定は `openai`）を使用します。
+
+[Gemini 3.5 Flash-Lite](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite) は短い会話の試用向けに選択しています。このモデルのみ推論量を `minimal` に設定します。アプリで OpenAI を試すときは、ホームで OpenAI を選んで新しい会話を始めてください。
 
 `backend/wrangler.jsonc` の `vars.OPENAI_MODEL` は現在 `gpt-5.6-luna` です。応答品質を比較するための試用で、Luna のみ推論量を `none` に設定しています。
 
@@ -67,6 +68,10 @@ Cloudflare の開発環境は引き続き `AI_PROVIDER=openai` です。ロー�
 自動テストは OpenAI・Gemini のリクエスト形式、会話履歴、エラー処理をモックで検証します。API キーを読み込まず、実際の AI を呼びません。返答品質とキーの有効性は、上記の curl または iOS アプリから手動で確認してください。
 
 ## iOS
+
+新規会話の AI は最初は Gemini で、以降は前回の選択を `AppStorage` に保存します。各会話には `providerID` を SwiftData で保存し、ホームの選択が変わっても履歴の接続先は変えません。
+
+既存ストアへは任意の `providerID` を追加します。過去の AI は記録されていないため推測せず、次の成功応答で確認した接続先を保存します。アプリは指定した AI と応答の `provider` が一致することを確認し、不一致・未対応の旧バックエンドの応答では履歴を保存せず下書きを残します。
 
 `ios/AIRoleplayChat.xcodeproj` を Xcode で開き、`AIRoleplayChat` スキームを選びます。プロジェクトの現在の設定は iOS 26.5 以降です。既存の Xcode サンプルデータとは別の `RoleplayChat` ストアに会話を保存します。
 
@@ -121,12 +126,15 @@ Release の URL は空欄です。将来公開する際に `Configuration/Releas
 ## MVP の手動確認
 
 1. バックエンドに API キーを設定し、`npm run dev` で起動する。
-2. Simulator でアプリを起動し、「会話を始める」から田中さんに話しかける。
+2. Simulator でアプリを起動し、OpenAI / Gemini を選んで「会話を始める」から田中さんに話しかける。
 3. AI の返答を受信し、2往復以上会話する。
 4. アプリを終了して再起動し、履歴から会話を開いて続きを送信する。
 5. バックエンド停止中に送信し、入力が残ることを確認する。再起動して再送する。
 6. ホームで履歴をスワイプ削除する。
+7. もう一方の AI で会話を始め、元の履歴からは以前の AI で続けられることを確認する。
 
 2026-09-09 に iPhone 17 Pro Simulator（iOS 26.5）で、単体テスト8件、モックを使った画面テスト3件、実際の OpenAI と2往復する画面テストを確認しました。実通信ではアプリを再起動して履歴を開き、続きを送信しています。Debug・Release のビルドも確認済みです。
+
+同日の AI 選択追加では、バックエンド86件、iOS 単体14件、画面操作4件と Release ビルドを確認しました。既存ストアの移行、両 AI の選択、再起動後の履歴継続を検証しています。この変更のテストはすべてモック通信です。画面テストでは履歴と AI の選択設定を専用の保存領域へ分けます。
 
 ユーザー登録・ログインは企画書どおり後回しです。Cloudflare では自分用の開発環境として、開発用トークンによるアクセス制御と Rate Limiting を使用します。デプロイと iOS の接続手順は [Cloudflare 開発環境](cloudflare.md) を参照してください。ローカルの既定環境とプレビュー URL は公開しません。

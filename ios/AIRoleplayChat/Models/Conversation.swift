@@ -9,14 +9,17 @@ final class Conversation {
     var characterName: String
     var createdAt: Date
     var updatedAt: Date
+    // Older conversations have no recorded provider; retain that distinction when migrating.
+    var providerID: String? = nil
     @Relationship(deleteRule: .cascade, inverse: \ChatMessage.conversation)
     var messages: [ChatMessage] = []
 
-    init(scenario: Scenario = .lateReport) {
+    init(scenario: Scenario = .lateReport, provider: AIProvider? = nil) {
         id = UUID()
         scenarioID = scenario.id
         title = scenario.title
         characterName = scenario.characterName
+        providerID = provider?.rawValue
         let now = Date()
         createdAt = now
         updatedAt = now
@@ -24,6 +27,10 @@ final class Conversation {
 
     var sortedMessages: [ChatMessage] {
         messages.sorted { $0.position < $1.position }
+    }
+
+    var provider: AIProvider? {
+        providerID.flatMap(AIProvider.init(rawValue:))
     }
 
     func appendTurn(userText: String, reply: String) {

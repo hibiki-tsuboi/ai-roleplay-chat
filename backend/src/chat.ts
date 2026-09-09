@@ -3,6 +3,8 @@ export const maxMessages = 40;
 export const maxMessageLength = 4_000;
 export const maxTotalLength = 24_000;
 
+export type AIProvider = "openai" | "gemini";
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -10,6 +12,7 @@ export interface ChatMessage {
 
 export interface ChatRequest {
   scenarioId: typeof scenarioID;
+  provider?: AIProvider;
   messages: ChatMessage[];
 }
 
@@ -32,6 +35,7 @@ export function parseChatRequest(value: unknown): ChatRequest | null {
     return null;
   }
   if (value.messages.length < 1 || value.messages.length > maxMessages) return null;
+  if (value.provider !== undefined && value.provider !== "openai" && value.provider !== "gemini") return null;
 
   const messages: ChatMessage[] = [];
   let totalLength = 0;
@@ -47,5 +51,5 @@ export function parseChatRequest(value: unknown): ChatRequest | null {
     messages.push({ role: message.role, content: message.content });
   }
   if (totalLength > maxTotalLength || messages.at(-1)?.role !== "user") return null;
-  return { scenarioId: scenarioID, messages };
+  return { scenarioId: scenarioID, provider: value.provider, messages };
 }

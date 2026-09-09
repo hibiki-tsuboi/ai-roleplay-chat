@@ -12,6 +12,7 @@ struct APIMessage: Codable, Equatable {
 
 struct ChatRequest: Encodable {
     let scenarioId: String
+    let provider: AIProvider?
     let messages: [APIMessage]
 
     // Match backend/src/chat.ts and docs/api.md. Swift's Character count differs from UTF-16.
@@ -19,12 +20,13 @@ struct ChatRequest: Encodable {
     static let maxMessageLength = 4_000
     static let maxTotalLength = 24_000
 
-    init(scenarioID: String, history: [APIMessage], text: String) throws {
+    init(scenarioID: String, provider: AIProvider? = nil, history: [APIMessage], text: String) throws {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.utf16.count <= Self.maxMessageLength else {
             throw ChatAPIError.invalidMessage
         }
         scenarioId = scenarioID
+        self.provider = provider
         var recent = Array((history + [APIMessage(role: .user, content: text)]).suffix(Self.maxMessages))
         while recent.count > 1 && recent.reduce(0, { $0 + $1.content.utf16.count }) > Self.maxTotalLength {
             recent.removeFirst()
@@ -34,6 +36,7 @@ struct ChatRequest: Encodable {
 }
 
 struct ChatResponse: Decodable {
+    let provider: AIProvider?
     let message: APIMessage
 }
 
@@ -49,6 +52,7 @@ enum ChatAPIError: LocalizedError {
     case notConfigured
     case invalidMessage
     case invalidResponse
+    case providerMismatch
     case server(String)
     case connectionFailed
     case timedOut
@@ -61,6 +65,8 @@ enum ChatAPIError: LocalizedError {
             "空白以外のメッセージを4,000文字以内で入力してください。"
         case .invalidResponse:
             "返答を読み取れませんでした。もう一度送信してください。"
+        case .providerMismatch:
+            "選択した AI の返答を確認できませんでした。接続先を確認して、もう一度お試しください。"
         case .server(let message):
             message
         case .connectionFailed:
@@ -92,7 +98,7 @@ struct ChatAPI {
         return api
     }
 
-    func send(_ payload: ChatRequest) async throws -> APIMessage {
+    func send(_ payload: ChatRequest) async throws -> ChatResponse {
         guard let baseURL, let host = baseURL.host, !host.isEmpty,
               baseURL.user == nil, baseURL.password == nil else {
             throw ChatAPIError.notConfigured
@@ -137,6 +143,9 @@ struct ChatAPI {
               reply.message.content.utf16.count <= ChatRequest.maxMessageLength else {
             throw ChatAPIError.invalidResponse
         }
-        return reply.message
+        if let selected = payload.provider, reply.provider != selected {
+            throw ChatAPIError.providerMismatch
+        }
+        return reply
     }
 }

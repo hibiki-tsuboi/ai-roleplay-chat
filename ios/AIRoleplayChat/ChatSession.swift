@@ -33,12 +33,16 @@ final class ChatSession {
         do {
             let request = try ChatRequest(
                 scenarioID: conversation.scenarioID,
+                provider: conversation.provider,
                 history: conversation.sortedMessages.map { APIMessage(role: $0.role, content: $0.content) },
                 text: text
             )
             let reply = try await api.send(request)
             try Task.checkCancellation()
-            conversation.appendTurn(userText: text, reply: reply.content)
+            conversation.appendTurn(userText: text, reply: reply.message.content)
+            if conversation.provider == nil {
+                conversation.providerID = reply.provider?.rawValue
+            }
             do {
                 try context.save()
             } catch {

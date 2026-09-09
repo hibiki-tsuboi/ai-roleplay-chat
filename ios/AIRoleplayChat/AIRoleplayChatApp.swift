@@ -11,6 +11,7 @@ struct AIRoleplayChatApp: App {
             case .success(let container):
                 ContentView()
                     .modelContainer(container)
+                    .defaultAppStorage(Self.preferences)
             case .failure:
                 ContentUnavailableView {
                     Label("会話履歴を開けませんでした", systemImage: "externaldrive.badge.exclamationmark")
@@ -21,6 +22,17 @@ struct AIRoleplayChatApp: App {
                 }
             }
         }
+    }
+
+    private static var preferences: UserDefaults {
+        #if DEBUG
+        if let testID = ProcessInfo.processInfo.environment["ROLEPLAY_TEST_STORE"],
+           let uuid = UUID(uuidString: testID),
+           let preferences = UserDefaults(suiteName: "UITests-\(uuid.uuidString)") {
+            return preferences
+        }
+        #endif
+        return .standard
     }
 
     private static func makeContainer() throws -> ModelContainer {

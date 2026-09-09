@@ -46,6 +46,20 @@ struct ChatView: View {
         }
         .navigationTitle("\(session.conversation.characterName)さんとの会話")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                VStack(spacing: 2) {
+                    Text("\(session.conversation.characterName)さんとの会話")
+                        .font(.headline)
+                    if let provider = session.conversation.provider {
+                        Text(provider.displayName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("conversationProvider")
+                    }
+                }
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
                 if let error = session.errorMessage {

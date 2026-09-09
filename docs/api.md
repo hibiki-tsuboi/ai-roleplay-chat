@@ -21,6 +21,7 @@ Cloudflare の開発環境では `Authorization: Bearer <DEV_ACCESS_TOKEN>` も�
 ```json
 {
   "scenarioId": "late-report",
+  "provider": "gemini",
   "messages": [
     { "role": "user", "content": "資料の進み具合を教えてください。" }
   ]
@@ -28,16 +29,18 @@ Cloudflare の開発環境では `Authorization: Bearer <DEV_ACCESS_TOKEN>` も�
 ```
 
 - `scenarioId`: 現在は `late-report`（提出が遅れている部下）のみ。
+- `provider`: 任意。`openai` または `gemini`。省略時はサーバーの `AI_PROVIDER` を使用。`null`・空文字・未知の値は400。
 - `messages`: 1〜40件。`role` は `user` または `assistant`。最後のメッセージは `user`。
 - `content`: 空白のみは不可。1件につき最大4,000 UTF-16コード単位、全件合計24,000単位以内。Swift では `String.utf16.count` で数えます。
 - リクエスト本文は最大256 KiB。本文の実バイト数も検証します。
 - iOS は今回の発言を追加してから、件数・合計長の上限に収まるまで最古のメッセージを除いて送信してください。端末上の履歴は削除しません。
-- AI の接続先・モデル名・役割のプロンプトはサーバー側で固定します。クライアントから指定するフィールドはありません。
+- モデル名・接続先 URL・役割のプロンプトはサーバー側で固定します。クライアントは `provider` で許可された AI だけを選べます。
 
 ### 成功レスポンス（200）
 
 ```json
 {
+  "provider": "gemini",
   "message": {
     "role": "assistant",
     "content": "すみません、集計に時間がかかっています。"
@@ -47,13 +50,15 @@ Cloudflare の開発環境では `Authorization: Bearer <DEV_ACCESS_TOKEN>` も�
 
 返答も最大4,000 UTF-16コード単位です。iOS は受信成功後、今回のユーザー発言と AI の返答を1往復として SwiftData に保存します。失敗時は入力を残し、再送でユーザー発言が二重保存されないようにします。画面を閉じると送信中の通信をキャンセルします。未送信の下書きや未完了の往復は永続化しません。
 
+応答の `provider` は実際に呼び出した AI です。iOS は会話に保存した接続先を毎回送信し、応答が一致することを確認します。指定済みなのに応答の `provider` が異なる・欠けている場合は保存しません。AI が未記録の既存履歴は接続先を省略して送信し、成功応答の `provider` を次回以降のために保存します。
+
 ### エラーレスポンス
 
 ```json
 {
   "error": {
     "code": "not_configured",
-    "message": "サーバーの AI 設定が完了していません。"
+    "message": "指定された AI を利用できません。サーバーの AI 設定を確認してください。"
   }
 }
 ```
@@ -78,7 +83,7 @@ Cloudflare の開発環境では `Authorization: Bearer <DEV_ACCESS_TOKEN>` も�
 
 ## サーバー側の接続
 
-`AI_PROVIDER`（`openai` または `gemini`、未指定時は `openai`）で接続先を選びます。切り替えても iOS との API 契約は共通です。選択した接続先の設定が不正なら `503 not_configured` を返し、他社への自動切り替えは行いません。
+リクエストの `provider` を優先し、省略時は `AI_PROVIDER`（`openai` または `gemini`、未設定時は `openai`）で接続先を選びます。選択した接続先の設定が不正なら `503 not_configured` を返し、他社への自動切り替えは行いません。認証・利用制限はどちらの AI にも共通です。
 
 ### OpenAI
 

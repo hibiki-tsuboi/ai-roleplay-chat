@@ -37,14 +37,51 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Gemini proxy", () => {
+  it.each(["openai", "gemini"])("honors the requested %s over the default provider", async (provider) => {
+    if (provider === "openai") {
+      upstreamFetch.mockResolvedValue(Response.json({ status: "completed", output: [
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: reply }] },
+      ] }));
+    }
+    const response = await worker.fetch(request({ provider }), {
+      ...env, AI_PROVIDER: provider === "openai" ? "gemini" : "openai",
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ provider, message: { role: "assistant", content: reply } });
+    expect(upstreamFetch).toHaveBeenCalledOnce();
+    expect(upstreamFetch.mock.calls[0]![0]).toBe(provider === "openai"
+      ? "https://api.openai.com/v1/responses" : "https://generativelanguage.googleapis.com/v1beta/interactions");
+    expect(JSON.stringify(upstreamFetch.mock.calls)).not.toContain(provider === "openai"
+      ? env.GEMINI_API_KEY : env.OPENAI_API_KEY);
+  });
+
+  it.each([null, "", "unknown", "OPENAI", true, {}, ["gemini"], "https://example.test"])(
+    "rejects an unsupported provider before calling AI (%#)", async (provider) => {
+      const response = await worker.fetch(request({ provider }), env);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ error: { code: "invalid_request" } });
+      expect(upstreamFetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["openai", "gemini"])("does not substitute a configured provider for missing %s credentials", async (provider) => {
+    const response = await worker.fetch(request({ provider }), {
+      ...env,
+      AI_PROVIDER: provider === "openai" ? "gemini" : "openai",
+      ...(provider === "openai" ? { OPENAI_API_KEY: undefined } : { GEMINI_API_KEY: undefined }),
+    });
+    expect(response.status).toBe(503);
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
   it("forwards history with the server's model, prompt and Gemini key", async () => {
     const response = await worker.fetch(request({
-      provider: "openai", model: "client-model", system_instruction: "client-prompt",
+      provider: "gemini", model: "client-model", system_instruction: "client-prompt",
       messages: messages.map((message) => ({ ...message, extra: "not forwarded" })),
     }), env);
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
-    expect(await response.json()).toEqual({ message: { role: "assistant", content: reply } });
+    expect(await response.json()).toEqual({ provider: "gemini", message: { role: "assistant", content: reply } });
     expect(upstreamFetch).toHaveBeenCalledOnce();
     const [url, options] = upstreamFetch.mock.calls[0]!;
     expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/interactions");
@@ -102,6 +139,7 @@ describe("Gemini proxy", () => {
       ] },
     ] }));
     expect(await (await worker.fetch(request(), env)).json()).toEqual({
+      provider: "gemini",
       message: { role: "assistant", content: "すみません。\n夕方までに提出します。" },
     });
   });
@@ -149,9 +187,9 @@ describe("Gemini proxy", () => {
   it("enforces development authorization and quota with Gemini", async () => {
     const cloud: Env = { ...env, APP_ENV: "development", DEV_ACCESS_TOKEN: "test-access-token",
       CHAT_RATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: false }) } };
-    expect((await worker.fetch(request(), cloud)).status).toBe(401);
+    expect((await worker.fetch(request({ provider: "gemini" }), cloud)).status).toBe(401);
     expect(cloud.CHAT_RATE_LIMITER!.limit).not.toHaveBeenCalled();
-    const authorized = request();
+    const authorized = request({ provider: "gemini" });
     authorized.headers.set("Authorization", "Bearer test-access-token");
     expect((await worker.fetch(authorized, cloud)).status).toBe(429);
     expect(cloud.CHAT_RATE_LIMITER!.limit).toHaveBeenCalledWith({ key: "ai-roleplay-chat-api-dev:chat" });

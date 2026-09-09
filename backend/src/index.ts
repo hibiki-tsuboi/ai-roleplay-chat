@@ -80,9 +80,9 @@ export default {
     }
     const chat = parseChatRequest(input);
     if (!chat) return error(400, "invalid_request", "シナリオまたはメッセージの形式を確認してください。");
-    const ai = resolveAIConfig(env);
+    const ai = resolveAIConfig(env, chat.provider);
     if (!ai) {
-      return error(503, "not_configured", "サーバーの AI 設定が完了していません。");
+      return error(503, "not_configured", "指定された AI を利用できません。サーバーの AI 設定を確認してください。");
     }
 
     if (env.APP_ENV !== "local" && env.CHAT_RATE_LIMITER) {
@@ -107,7 +107,7 @@ export default {
       }
       const reply = extractReply(await upstream.json(), ai.provider);
       if (!reply) return error(502, "invalid_response", "AI の応答を読み取れませんでした。もう一度お試しください。");
-      return json({ message: { role: "assistant", content: reply } });
+      return json({ provider: ai.provider, message: { role: "assistant", content: reply } });
     } catch (cause) {
       if (cause instanceof Error && (cause.name === "TimeoutError" || cause.name === "AbortError")) {
         return error(504, "upstream_timeout", "AI の応答がタイムアウトしました。もう一度お試しください。");
