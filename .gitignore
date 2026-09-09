@@ -19,3 +19,6 @@ xcuserdata/
 *.xcuserstate
 *.xcresult
 Local.xcconfig
+
+# Editor and IDE local state
+.idea/
