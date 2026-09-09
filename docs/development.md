@@ -3,7 +3,7 @@
 ## 初期構成の判断
 
 - iOS はユーザーが Xcode で作成したプロジェクトを `ios/` に配置し、SwiftUI でシナリオ・チャット・履歴画面を実装しています。
-- Workers は標準の `fetch` と小さなハンドラーで実装します。ルーター、OpenAI SDK、DB、ユーザー管理は追加していません。
+- Workers は標準の `fetch` と小さなハンドラーで実装します。OpenAI・Gemini への接続と応答の変換は `backend/src/ai.ts` に置きます。ルーター、AI の SDK、DB、ユーザー管理は追加していません。
 - 最初のシナリオ ID は `late-report`。人物・背景・話し方は `backend/src/chat.ts` に置きます。
 - API は非ストリーミングです。iOS の SwiftData に `Conversation` と `ChatMessage` を保存し、Workers に保存しません。会話削除時はメッセージも削除します。
 - 送信状態・再送処理は `ChatSession`、HTTP 通信と履歴の送信上限は `ChatAPI.swift` にまとめています。API の応答が成功した往復だけを保存します。
@@ -19,7 +19,7 @@
 | `npm run dev` | `127.0.0.1:8787` で Workers をローカル起動 |
 | `npm run types` | Wrangler の設定から実行環境の型を生成 |
 | `npm run typecheck` | 型生成と TypeScript の strict チェック |
-| `npm test` | Vitest による API テスト。OpenAI への通信はモック |
+| `npm test` | Vitest による API テスト。OpenAI・Gemini への通信はモック |
 | `npm run test:watch` | テストを監視モードで実行 |
 | `npm run build` | Workers の dry-run ビルド。公開しない |
 | `npm run build:dev` | Cloudflare 開発環境の dry-run ビルド。公開しない |
@@ -32,7 +32,7 @@ Wrangler の間接依存 `miniflare > sharp` は、[修正済みバージョン 
 
 ### チャット API の手動確認
 
-`.dev.vars.example` を `.dev.vars` にコピーしてキーを設定し、`npm run dev` で起動した後に実行します。実際の OpenAI API 利用が発生します。
+初回は `.dev.vars.example` を `.dev.vars` にコピーし、使用する AI のキーを設定します。既存の `.dev.vars` があれば直接編集してください。`npm run dev` で起動した後に次を実行すると、選択した AI の API 利用が発生します。
 
 ```bash
 curl http://localhost:8787/v1/chat \
@@ -44,13 +44,27 @@ curl http://localhost:8787/v1/chat \
 
 ### モデルの切り替え
 
+接続先は `.dev.vars` の `AI_PROVIDER` で選びます。既定は `openai` です。Gemini を試す場合は、既存のキーを残したまま次を設定します。
+
+```dotenv
+AI_PROVIDER=gemini
+GEMINI_API_KEY=取得したキー
+GEMINI_MODEL=gemini-3.5-flash-lite
+```
+
+設定後は `npm run dev` を再起動します。同じ curl・iOS アプリで Gemini と会話できます。使用する接続先のキーとモデルだけが必要で、未設定・エラー時に他社の AI へ自動で切り替えません。
+
+[Gemini 3.5 Flash-Lite](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite) は短い会話の試用向けに選択しています。このモデルのみ推論量を `minimal` に設定します。OpenAI に戻すには `.dev.vars` を `AI_PROVIDER=openai` に変更して再起動してください。
+
 `backend/wrangler.jsonc` の `vars.OPENAI_MODEL` は現在 `gpt-5.6-luna` です。応答品質を比較するための試用で、Luna のみ推論量を `none` に設定しています。
 
 元のモデルに戻す場合は `OPENAI_MODEL` を `gpt-4.1-mini` に変更し、`backend/` の `npm run dev` を再起動してください。Luna 固有の推論設定は自動的に省略されるため、コードの変更は不要です。`.dev.vars` に `OPENAI_MODEL` を追加している場合は、その上書きも変更または削除してください。
 
 Cloudflare 上のモデルは `env.dev.vars.OPENAI_MODEL` で指定します。変更後に `npm run deploy:dev` で反映します。Wrangler の環境ごとの変数は継承されないため、ローカルと別に変更してください。
 
-自動テストは両モデルのリクエスト形式をモックで検証します。Luna の実際の返答品質は、上記の curl または iOS アプリから手動で確認してください。
+Cloudflare の開発環境は引き続き `AI_PROVIDER=openai` です。ローカルの `.dev.vars` はデプロイ先に反映されません。Gemini のキー登録・デプロイは今回のローカル設定には含みません。
+
+自動テストは OpenAI・Gemini のリクエスト形式、会話履歴、エラー処理をモックで検証します。API キーを読み込まず、実際の AI を呼びません。返答品質とキーの有効性は、上記の curl または iOS アプリから手動で確認してください。
 
 ## iOS
 

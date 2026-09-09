@@ -1,8 +1,7 @@
-import { isRecord, maxMessageLength, parseChatRequest, scenarioInstructions } from "./chat";
+import { type AIEnv, extractReply, fetchAI, resolveAIConfig } from "./ai";
+import { parseChatRequest } from "./chat";
 
-export interface Env {
-  OPENAI_API_KEY?: string;
-  OPENAI_MODEL: string;
+export interface Env extends AIEnv {
   APP_ENV?: string;
   DEV_ACCESS_TOKEN?: string;
   CHAT_RATE_LIMITER?: RateLimit;
@@ -45,22 +44,6 @@ async function readBody(request: Request): Promise<string | null> {
   }
 }
 
-function extractReply(value: unknown): string | null {
-  if (!isRecord(value) || value.status !== "completed" || !Array.isArray(value.output)) return null;
-  const parts: string[] = [];
-  for (const item of value.output) {
-    if (!isRecord(item) || item.type !== "message" || item.role !== "assistant"
-      || !Array.isArray(item.content)) continue;
-    for (const content of item.content) {
-      if (isRecord(content) && content.type === "output_text" && typeof content.text === "string") {
-        parts.push(content.text);
-      }
-    }
-  }
-  const text = parts.join("\n").trim();
-  return text.length > 0 && text.length <= maxMessageLength ? text : null;
-}
-
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const path = new URL(request.url).pathname;
@@ -97,8 +80,9 @@ export default {
     }
     const chat = parseChatRequest(input);
     if (!chat) return error(400, "invalid_request", "シナリオまたはメッセージの形式を確認してください。");
-    if (!env.OPENAI_API_KEY?.trim() || !env.OPENAI_MODEL?.trim()) {
-      return error(503, "not_configured", "サーバーの OpenAI 設定が完了していません。");
+    const ai = resolveAIConfig(env);
+    if (!ai) {
+      return error(503, "not_configured", "サーバーの AI 設定が完了していません。");
     }
 
     if (env.APP_ENV !== "local" && env.CHAT_RATE_LIMITER) {
@@ -114,30 +98,14 @@ export default {
     }
 
     try {
-      const upstream = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: env.OPENAI_MODEL,
-          instructions: scenarioInstructions,
-          input: chat.messages,
-          store: false,
-          max_output_tokens: 800,
-          // Keep short chat replies within the token budget; omit for GPT-4.1 rollback.
-          reasoning: env.OPENAI_MODEL === "gpt-5.6-luna" ? { effort: "none" } : undefined,
-        }),
-        signal: AbortSignal.timeout(30_000),
-      });
+      const upstream = await fetchAI(ai, chat.messages);
       if (!upstream.ok) {
         await upstream.body?.cancel();
         return upstream.status === 429
           ? error(429, "rate_limited", "ただいま混み合っています。少し待ってから再送してください。")
           : error(502, "upstream_error", "AI の応答を取得できませんでした。もう一度お試しください。");
       }
-      const reply = extractReply(await upstream.json());
+      const reply = extractReply(await upstream.json(), ai.provider);
       if (!reply) return error(502, "invalid_response", "AI の応答を読み取れませんでした。もう一度お試しください。");
       return json({ message: { role: "assistant", content: reply } });
     } catch (cause) {

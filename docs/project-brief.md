@@ -72,19 +72,19 @@ ai-roleplay-chat/
 
 Cloudflare Workersを利用する予定。
 
-役割は主にOpenAI APIへの安全なプロキシ。
+役割は主にOpenAI APIへの安全なプロキシ。ローカルでは比較用にGemini APIも選択できる。
 
 ```text
 iPhone App
     ↓ HTTPS
 Cloudflare Workers
     ↓
-OpenAI API
+OpenAI API / Gemini API
 ```
 
-OpenAI API KeyをiOSアプリ内には保存しない。
+OpenAI・GeminiのAPI KeyをiOSアプリ内には保存しない。
 
-Cloudflare Workers側のSecretとして管理する。
+Cloudflare Workers側のSecretとして管理する。ローカルではGit管理外の`backend/.dev.vars`を使う。現在のCloudflare開発環境はOpenAIを使用する。
 
 MVPではバックエンド側に大規模なDBやユーザー管理を持たせない方針。
 
