@@ -1,0 +1,123 @@
+import { isRecord, maxMessageLength, parseChatRequest, scenarioInstructions } from "./chat";
+
+export interface Env {
+  OPENAI_API_KEY?: string;
+  OPENAI_MODEL: string;
+}
+
+const maxBodyBytes = 256 * 1024;
+
+function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
+  return Response.json(body, {
+    status,
+    headers: { "Cache-Control": "no-store", ...headers },
+  });
+}
+
+function error(status: number, code: string, message: string): Response {
+  return json({ error: { code, message } }, status);
+}
+
+async function readBody(request: Request): Promise<string | null> {
+  if (Number(request.headers.get("Content-Length")) > maxBodyBytes) return null;
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let body = "";
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > maxBodyBytes) {
+        await reader.cancel();
+        return null;
+      }
+      body += decoder.decode(value, { stream: true });
+    }
+    return body + decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function extractReply(value: unknown): string | null {
+  if (!isRecord(value) || value.status !== "completed" || !Array.isArray(value.output)) return null;
+  const parts: string[] = [];
+  for (const item of value.output) {
+    if (!isRecord(item) || item.type !== "message" || item.role !== "assistant"
+      || !Array.isArray(item.content)) continue;
+    for (const content of item.content) {
+      if (isRecord(content) && content.type === "output_text" && typeof content.text === "string") {
+        parts.push(content.text);
+      }
+    }
+  }
+  const text = parts.join("\n").trim();
+  return text.length > 0 && text.length <= maxMessageLength ? text : null;
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const path = new URL(request.url).pathname;
+    if (path === "/health") {
+      return request.method === "GET"
+        ? json({ status: "ok" })
+        : json({ error: { code: "method_not_allowed", message: "GET を使用してください。" } }, 405, { Allow: "GET" });
+    }
+    if (path !== "/v1/chat") return error(404, "not_found", "API が見つかりません。");
+    if (request.method !== "POST") {
+      return json({ error: { code: "method_not_allowed", message: "POST を使用してください。" } }, 405, { Allow: "POST" });
+    }
+    if (request.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") {
+      return error(415, "unsupported_media_type", "JSON 形式で送信してください。");
+    }
+
+    let input: unknown;
+    try {
+      const body = await readBody(request);
+      if (body === null) return error(413, "payload_too_large", "送信データが大きすぎます。");
+      input = JSON.parse(body);
+    } catch {
+      return error(400, "invalid_json", "JSON を読み取れませんでした。");
+    }
+    const chat = parseChatRequest(input);
+    if (!chat) return error(400, "invalid_request", "シナリオまたはメッセージの形式を確認してください。");
+    if (!env.OPENAI_API_KEY?.trim() || !env.OPENAI_MODEL?.trim()) {
+      return error(503, "not_configured", "サーバーの OpenAI 設定が完了していません。");
+    }
+
+    try {
+      const upstream = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: env.OPENAI_MODEL,
+          instructions: scenarioInstructions,
+          input: chat.messages,
+          store: false,
+          max_output_tokens: 800,
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!upstream.ok) {
+        await upstream.body?.cancel();
+        return upstream.status === 429
+          ? error(429, "rate_limited", "ただいま混み合っています。少し待ってから再送してください。")
+          : error(502, "upstream_error", "AI の応答を取得できませんでした。もう一度お試しください。");
+      }
+      const reply = extractReply(await upstream.json());
+      if (!reply) return error(502, "invalid_response", "AI の応答を読み取れませんでした。もう一度お試しください。");
+      return json({ message: { role: "assistant", content: reply } });
+    } catch (cause) {
+      if (cause instanceof Error && (cause.name === "TimeoutError" || cause.name === "AbortError")) {
+        return error(504, "upstream_timeout", "AI の応答がタイムアウトしました。もう一度お試しください。");
+      }
+      return error(502, "upstream_error", "AI に接続できませんでした。もう一度お試しください。");
+    }
+  },
+} satisfies ExportedHandler<Env>;

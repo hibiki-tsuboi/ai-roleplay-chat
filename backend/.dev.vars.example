@@ -1,0 +1,2 @@
+# Copy to .dev.vars and set your key locally. Never commit .dev.vars.
+OPENAI_API_KEY=

@@ -1,0 +1,21 @@
+.DS_Store
+
+# Backend dependencies, generated files, and secrets
+node_modules/
+.wrangler/
+dist/
+coverage/
+worker-configuration.d.ts
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
+*.log
+
+# Xcode local state and build products
+DerivedData/
+build/
+xcuserdata/
+*.xcuserstate
+*.xcresult
+Local.xcconfig
