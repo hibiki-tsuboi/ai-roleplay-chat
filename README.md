@@ -24,6 +24,7 @@ docs/
 
 - iOS にはシナリオからの会話開始、メッセージ送受信、送信中表示、失敗時の再送、会話履歴の再表示・削除を実装しています。
 - バックエンドには `GET /health` と `POST /v1/chat`、シナリオのプロンプト、入力検証、エラー処理を用意しています。
+- Cloudflare の開発用バックエンドはデプロイ済みです。開発用トークンと連続送信の制限を設けています。接続・デプロイ手順は [Cloudflare 開発環境](docs/cloudflare.md) を参照してください。
 - 会話履歴は SwiftData で iPhone 内に保存します。バックエンド DB・認証・同期・課金は未実装です。
 
 ## バックエンドの起動
@@ -58,4 +59,4 @@ Debug ビルドの接続先は `http://localhost:8787` です。Mac 上でバッ
 
 変更前に [AGENTS.md](AGENTS.md) と [企画書](docs/project-brief.md) を確認してください。API の変更時は [API 契約](docs/api.md) と iOS 側を揃えます。OpenAI API キーはバックエンドのローカル `.dev.vars`、公開環境では Workers Secret で管理します。
 
-初期構成はローカル開発用です。公開時のアクセス制御と利用量制限は別途設計します。詳しい手順は [開発ガイド](docs/development.md) を参照してください。
+現在はローカルと Cloudflare の個人開発用です。一般公開に向けたユーザー認証と利用量管理は別途設計します。詳しい手順は [開発ガイド](docs/development.md) を参照してください。

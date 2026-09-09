@@ -10,8 +10,10 @@
     "typecheck": "npm run types && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "wrangler deploy --dry-run --outdir dist",
-    "check": "npm run typecheck && npm test && npm run build"
+    "build": "wrangler deploy --env \"\" --dry-run --outdir dist",
+    "build:dev": "wrangler deploy --env dev --dry-run --outdir dist/dev",
+    "deploy:dev": "wrangler deploy --env dev",
+    "check": "npm run typecheck && npm test && npm run build && npm run build:dev"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

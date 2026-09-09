@@ -74,6 +74,9 @@ enum ChatAPIError: LocalizedError {
 struct ChatAPI {
     var baseURL: URL?
     var session: URLSession = .shared
+    #if DEBUG
+    var developmentAccessToken: String?
+    #endif
 
     static var configured: ChatAPI {
         var address = Bundle.main.object(forInfoDictionaryKey: "APIBaseURL") as? String ?? ""
@@ -82,7 +85,11 @@ struct ChatAPI {
             address = override
         }
         #endif
-        return ChatAPI(baseURL: URL(string: address))
+        var api = ChatAPI(baseURL: URL(string: address))
+        #if DEBUG
+        api.developmentAccessToken = ProcessInfo.processInfo.environment["ROLEPLAY_DEV_ACCESS_TOKEN"]
+        #endif
+        return api
     }
 
     func send(_ payload: ChatRequest) async throws -> APIMessage {
@@ -102,6 +109,12 @@ struct ChatAPI {
         request.httpMethod = "POST"
         request.timeoutInterval = 45
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        #if DEBUG
+        if let token = developmentAccessToken?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty {
+            guard baseURL.scheme == "https" else { throw ChatAPIError.notConfigured }
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        #endif
         request.httpBody = try JSONEncoder().encode(payload)
 
         let data: Data

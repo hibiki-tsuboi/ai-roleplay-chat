@@ -117,6 +117,32 @@ struct ChatTests {
         #expect(reply == APIMessage(role: .assistant, content: "すみません。"))
     }
 
+    #if DEBUG
+    @Test func cloudDevelopmentRequestIncludesAccessTokenOverHTTPS() async throws {
+        StubURLProtocol.handler = { request in
+            #expect(request.url?.absoluteString == "https://example.test/v1/chat")
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer development-test-token")
+            return (200, Data(#"{"message":{"role":"assistant","content":"すみません。"}}"#.utf8))
+        }
+        var api = client()
+        api.baseURL = URL(string: "https://example.test")
+        api.developmentAccessToken = "development-test-token"
+        let request = try ChatRequest(scenarioID: "late-report", history: [], text: "状況は？")
+        #expect(try await api.send(request).content == "すみません。")
+    }
+
+    @Test func developmentTokenCannotBeSentOverHTTP() async throws {
+        StubURLProtocol.handler = { _ in
+            Issue.record("The token must not be sent over HTTP")
+            return (200, Data())
+        }
+        var api = client()
+        api.developmentAccessToken = "development-test-token"
+        let request = try ChatRequest(scenarioID: "late-report", history: [], text: "状況は？")
+        await #expect(throws: ChatAPIError.self) { try await api.send(request) }
+    }
+    #endif
+
     @Test(arguments: [
         #"{"message":{"role":"user","content":"wrong role"}}"#,
         #"{"message":{"role":"assistant","content":" "}}"#,

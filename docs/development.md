@@ -22,7 +22,9 @@
 | `npm test` | Vitest による API テスト。OpenAI への通信はモック |
 | `npm run test:watch` | テストを監視モードで実行 |
 | `npm run build` | Workers の dry-run ビルド。公開しない |
-| `npm run check` | 型チェック・テスト・ビルドを実行 |
+| `npm run build:dev` | Cloudflare 開発環境の dry-run ビルド。公開しない |
+| `npm run deploy:dev` | Cloudflare の `ai-roleplay-chat-api-dev` にデプロイ |
+| `npm run check` | 型チェック・テスト・両環境の dry-run ビルドを実行 |
 
 Wrangler の生成型・ビルド出力・ローカル状態は Git 管理対象外です。Wrangler はユーザーの設定領域にログを書き、型生成時にもローカルポートを使用します。
 
@@ -45,6 +47,8 @@ curl http://localhost:8787/v1/chat \
 `backend/wrangler.jsonc` の `vars.OPENAI_MODEL` は現在 `gpt-5.6-luna` です。応答品質を比較するための試用で、Luna のみ推論量を `none` に設定しています。
 
 元のモデルに戻す場合は `OPENAI_MODEL` を `gpt-4.1-mini` に変更し、`backend/` の `npm run dev` を再起動してください。Luna 固有の推論設定は自動的に省略されるため、コードの変更は不要です。`.dev.vars` に `OPENAI_MODEL` を追加している場合は、その上書きも変更または削除してください。
+
+Cloudflare 上のモデルは `env.dev.vars.OPENAI_MODEL` で指定します。変更後に `npm run deploy:dev` で反映します。Wrangler の環境ごとの変数は継承されないため、ローカルと別に変更してください。
 
 自動テストは両モデルのリクエスト形式をモックで検証します。Luna の実際の返答品質は、上記の curl または iOS アプリから手動で確認してください。
 
@@ -111,4 +115,4 @@ Release の URL は空欄です。将来公開する際に `Configuration/Releas
 
 2026-09-09 に iPhone 17 Pro Simulator（iOS 26.5）で、単体テスト8件、モックを使った画面テスト3件、実際の OpenAI と2往復する画面テストを確認しました。実通信ではアプリを再起動して履歴を開き、続きを送信しています。Debug・Release のビルドも確認済みです。
 
-認証は企画書どおり後回しです。現在はローカル開発用として `workers_dev` と `preview_urls` を無効にし、公開ルートを設定していません。外部公開時にはアクセス制御と利用量制限を決めてから公開設定を追加してください。
+ユーザー登録・ログインは企画書どおり後回しです。Cloudflare では自分用の開発環境として、開発用トークンによるアクセス制御と Rate Limiting を使用します。デプロイと iOS の接続手順は [Cloudflare 開発環境](cloudflare.md) を参照してください。ローカルの既定環境とプレビュー URL は公開しません。

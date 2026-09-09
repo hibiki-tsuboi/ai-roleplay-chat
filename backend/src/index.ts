@@ -3,6 +3,9 @@ import { isRecord, maxMessageLength, parseChatRequest, scenarioInstructions } fr
 export interface Env {
   OPENAI_API_KEY?: string;
   OPENAI_MODEL: string;
+  APP_ENV?: string;
+  DEV_ACCESS_TOKEN?: string;
+  CHAT_RATE_LIMITER?: RateLimit;
 }
 
 const maxBodyBytes = 256 * 1024;
@@ -70,6 +73,16 @@ export default {
     if (request.method !== "POST") {
       return json({ error: { code: "method_not_allowed", message: "POST を使用してください。" } }, 405, { Allow: "POST" });
     }
+    // Only the explicitly local configuration allows unauthenticated chat.
+    if (env.APP_ENV !== "local") {
+      if (!env.DEV_ACCESS_TOKEN?.trim() || !env.CHAT_RATE_LIMITER) {
+        return error(503, "not_configured", "開発用サーバーのアクセス設定が完了していません。");
+      }
+      if (request.headers.get("Authorization") !== `Bearer ${env.DEV_ACCESS_TOKEN}`) {
+        return json({ error: { code: "unauthorized", message: "開発用のアクセストークンを確認してください。" } },
+          401, { "WWW-Authenticate": "Bearer" });
+      }
+    }
     if (request.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") {
       return error(415, "unsupported_media_type", "JSON 形式で送信してください。");
     }
@@ -86,6 +99,18 @@ export default {
     if (!chat) return error(400, "invalid_request", "シナリオまたはメッセージの形式を確認してください。");
     if (!env.OPENAI_API_KEY?.trim() || !env.OPENAI_MODEL?.trim()) {
       return error(503, "not_configured", "サーバーの OpenAI 設定が完了していません。");
+    }
+
+    if (env.APP_ENV !== "local" && env.CHAT_RATE_LIMITER) {
+      try {
+        const { success } = await env.CHAT_RATE_LIMITER.limit({ key: "ai-roleplay-chat-api-dev:chat" });
+        if (!success) {
+          return json({ error: { code: "rate_limited", message: "少し待ってから再送してください。" } },
+            429, { "Retry-After": "60" });
+        }
+      } catch {
+        return error(503, "rate_limit_unavailable", "利用制限を確認できませんでした。少し待ってから再送してください。");
+      }
     }
 
     try {

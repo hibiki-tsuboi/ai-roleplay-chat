@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import worker, { type Env } from "../src/index";
 import { maxMessageLength, maxMessages, maxTotalLength, scenarioInstructions } from "../src/chat";
 
-const env: Env = { OPENAI_API_KEY: "test-only-key", OPENAI_MODEL: "test-model" };
+const env: Env = { OPENAI_API_KEY: "test-only-key", OPENAI_MODEL: "test-model", APP_ENV: "local" };
 const validBody = {
   scenarioId: "late-report",
   messages: [{ role: "user", content: "資料の進み具合を教えてください。" }],
@@ -98,7 +98,7 @@ describe("request validation", () => {
   it("reports a missing key without calling OpenAI", async () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
-    const response = await worker.fetch(request(), { OPENAI_MODEL: "test" });
+    const response = await worker.fetch(request(), { OPENAI_MODEL: "test", APP_ENV: "local" });
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({ error: { code: "not_configured" } });
     expect(fetch).not.toHaveBeenCalled();
@@ -195,4 +195,105 @@ describe("OpenAI proxy", () => {
       expect((await worker.fetch(request(), env)).status).toBe(status);
     },
   );
+});
+
+describe("Cloudflare development access", () => {
+  function cloudEnv(): Env {
+    return {
+      ...env,
+      APP_ENV: "development",
+      DEV_ACCESS_TOKEN: "development-test-token",
+      CHAT_RATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: true }) },
+    };
+  }
+
+  function authorizedRequest(body: unknown = validBody): Request {
+    const req = request(body);
+    req.headers.set("Authorization", "Bearer development-test-token");
+    return req;
+  }
+
+  it.each([undefined, "Bearer incorrect", "Basic development-test-token"])(
+    "rejects invalid credentials before reading the body or calling OpenAI (%s)", async (authorization) => {
+      const cloud = cloudEnv();
+      const fetch = vi.fn();
+      vi.stubGlobal("fetch", fetch);
+      const req = request({ invalid: true });
+      if (authorization) req.headers.set("Authorization", authorization);
+      const response = await worker.fetch(req, cloud);
+      expect(response.status).toBe(401);
+      expect(response.headers.get("WWW-Authenticate")).toBe("Bearer");
+      expect(await response.json()).toMatchObject({ error: { code: "unauthorized" } });
+      expect(cloud.CHAT_RATE_LIMITER!.limit).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { DEV_ACCESS_TOKEN: undefined },
+    { DEV_ACCESS_TOKEN: " " },
+    { CHAT_RATE_LIMITER: undefined },
+    { APP_ENV: undefined, DEV_ACCESS_TOKEN: undefined },
+  ])("fails closed when access configuration is missing (%#)", async (overrides) => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const response = await worker.fetch(authorizedRequest(), { ...cloudEnv(), ...overrides });
+    expect(response.status).toBe(503);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps health public without consuming chat quota", async () => {
+    const cloud = cloudEnv();
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const response = await worker.fetch(new Request("https://example.test/health"), cloud);
+    expect(await response.json()).toEqual({ status: "ok" });
+    expect(cloud.CHAT_RATE_LIMITER!.limit).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("forwards authorized chat using only the server's OpenAI credential", async () => {
+    const cloud = cloudEnv();
+    const fetch = vi.fn().mockResolvedValue(Response.json(responseBody()));
+    vi.stubGlobal("fetch", fetch);
+    const response = await worker.fetch(authorizedRequest(), cloud);
+    expect(response.status).toBe(200);
+    expect(cloud.CHAT_RATE_LIMITER!.limit).toHaveBeenCalledWith({ key: "ai-roleplay-chat-api-dev:chat" });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch.mock.calls[0]![1].headers.Authorization).toBe("Bearer test-only-key");
+    expect(JSON.stringify(fetch.mock.calls)).not.toContain(cloud.DEV_ACCESS_TOKEN);
+    expect(await response.text()).not.toContain(cloud.DEV_ACCESS_TOKEN);
+  });
+
+  it("rejects invalid input without consuming chat quota", async () => {
+    const cloud = cloudEnv();
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    expect((await worker.fetch(authorizedRequest({}), cloud)).status).toBe(400);
+    expect(cloud.CHAT_RATE_LIMITER!.limit).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("blocks OpenAI calls when the development quota is exhausted", async () => {
+    const cloud = cloudEnv();
+    vi.mocked(cloud.CHAT_RATE_LIMITER!.limit).mockResolvedValue({ success: false });
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const response = await worker.fetch(authorizedRequest(), cloud);
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("60");
+    expect(await response.json()).toMatchObject({ error: { code: "rate_limited" } });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("blocks OpenAI calls if the rate limiter fails", async () => {
+    const cloud = cloudEnv();
+    vi.mocked(cloud.CHAT_RATE_LIMITER!.limit).mockRejectedValue(new Error("private limiter error"));
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const response = await worker.fetch(authorizedRequest(), cloud);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ error: { code: "rate_limit_unavailable" } });
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });
