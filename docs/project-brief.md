@@ -10,7 +10,8 @@ GitHub repository:
 
 `git@github.com:hibiki-tsuboi/ai-roleplay-chat.git`
 
-正式なアプリ名は未定。  
+ホーム画面の表示名は「AIロープレ」。正式なアプリ名は未定。
+
 `ai-roleplay-chat` は開発用の仮名称。
 
 ---
