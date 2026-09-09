@@ -5,6 +5,19 @@ import SwiftUI
 struct AIRoleplayChatApp: App {
     @State private var store = Result { try makeContainer() }
 
+    init() {
+        #if DEBUG
+        do {
+            try DevelopmentConnectionStore.captureLaunchConfiguration(environment: ProcessInfo.processInfo.environment)
+        } catch {
+            NSLog("Could not save the development connection to Keychain.")
+        }
+        let api = ChatAPI.configured
+        NSLog("Development backend host: %@; access token configured: %@",
+              api.baseURL?.host ?? "unset", api.developmentAccessToken?.isEmpty == false ? "yes" : "no")
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             switch store {

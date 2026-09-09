@@ -95,7 +95,7 @@ Workers から [OpenAI Responses API](https://developers.openai.com/api/docs/gui
 
 ### Gemini
 
-[Gemini Interactions API](https://ai.google.dev/api/interactions-api) の `POST /v1beta/interactions` を使用し、`GEMINI_API_KEY` を `x-goog-api-key` ヘッダーに設定します。ローカルで試すモデルは `GEMINI_MODEL=gemini-3.5-flash-lite` です。
+[Gemini Interactions API](https://ai.google.dev/api/interactions-api) の `POST /v1beta/interactions` を使用し、`GEMINI_API_KEY` を `x-goog-api-key` ヘッダーに設定します。ローカル・Cloudflare 開発環境のモデルは `GEMINI_MODEL=gemini-3.5-flash-lite` です。
 
 `system_instruction` にシナリオを設定し、履歴を `input` の `user_input` / `model_output` ステップへ変換します。`store: false` を指定し、毎回履歴を送信します。これは後から取得するための保存を無効にする設定です（[データ保持の仕様](https://ai.google.dev/gemini-api/docs/interactions-overview#data-retention)）。
 

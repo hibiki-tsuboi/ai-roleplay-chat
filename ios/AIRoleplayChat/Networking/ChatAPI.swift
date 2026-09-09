@@ -85,17 +85,15 @@ struct ChatAPI {
     #endif
 
     static var configured: ChatAPI {
-        var address = Bundle.main.object(forInfoDictionaryKey: "APIBaseURL") as? String ?? ""
+        let address = Bundle.main.object(forInfoDictionaryKey: "APIBaseURL") as? String ?? ""
         #if DEBUG
-        if let override = ProcessInfo.processInfo.environment["ROLEPLAY_API_BASE_URL"] {
-            address = override
-        }
+        let environment = ProcessInfo.processInfo.environment
+        let saved = environment["ROLEPLAY_TEST_STORE"] == nil ? DevelopmentConnectionStore.shared.load() : nil
+        let connection = DevelopmentConnection.resolve(defaultAddress: address, environment: environment, saved: saved)
+        return ChatAPI(baseURL: URL(string: connection.address), developmentAccessToken: connection.accessToken)
+        #else
+        return ChatAPI(baseURL: URL(string: address))
         #endif
-        var api = ChatAPI(baseURL: URL(string: address))
-        #if DEBUG
-        api.developmentAccessToken = ProcessInfo.processInfo.environment["ROLEPLAY_DEV_ACCESS_TOKEN"]
-        #endif
-        return api
     }
 
     func send(_ payload: ChatRequest) async throws -> ChatResponse {

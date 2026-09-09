@@ -63,7 +63,7 @@ curl でも JSON に `"provider":"gemini"` または `"provider":"openai"` を�
 
 Cloudflare 上のモデルは `env.dev.vars.OPENAI_MODEL` で指定します。変更後に `npm run deploy:dev` で反映します。Wrangler の環境ごとの変数は継承されないため、ローカルと別に変更してください。
 
-Cloudflare の開発環境は引き続き `AI_PROVIDER=openai` です。ローカルの `.dev.vars` はデプロイ先に反映されません。Gemini のキー登録・デプロイは今回のローカル設定には含みません。
+Cloudflare の開発環境も OpenAI / Gemini の選択に対応しています。`AI_PROVIDER=openai` は接続先を省略したリクエストの既定値です。ローカルの `.dev.vars` はデプロイ先に自動反映されないため、公開先のモデル・Secret は [Cloudflare 開発環境](cloudflare.md) の手順で管理します。
 
 自動テストは OpenAI・Gemini のリクエスト形式、会話履歴、エラー処理をモックで検証します。API キーを読み込まず、実際の AI を呼びません。返答品質とキーの有効性は、上記の curl または iOS アプリから手動で確認してください。
 
@@ -91,12 +91,14 @@ xcodebuild -project ios/AIRoleplayChat.xcodeproj \
 
 CLI では、インストール済み Simulator 名を指定して実行します。
 
+Keychain の実動作もテストするため、単体テストでは通常のコード署名を有効にします。`CODE_SIGNING_ALLOWED=NO` は付けないでください。
+
 ```bash
 xcodebuild -project ios/AIRoleplayChat.xcodeproj \
   -scheme AIRoleplayChat \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' \
   -derivedDataPath /tmp/ai-roleplay-chat-derived \
-  CODE_SIGNING_ALLOWED=NO test
+  test
 ```
 
 画面操作の XCTest は `AIRoleplayChatUITests` スキームです。まず別ターミナルで以下の HTTP モックを起動します（リポジトリルートで実行）。
@@ -111,9 +113,13 @@ node ios/scripts/mock-chat-server.mjs
 
 Debug の接続先は `Configuration/Debug-Info.plist` の `http://localhost:8787` です。Simulator から Mac 上のバックエンドに接続できます。Xcode の Edit Scheme → Run → Arguments → Environment Variables に `ROLEPLAY_API_BASE_URL` を追加すると、Debug の接続先を上書きできます。API キーはこの設定に入れません。
 
+Cloudflare 用の HTTPS URL と `ROLEPLAY_DEV_ACCESS_TOKEN` を設定して一度起動すると、両方を端末の Keychain に保存します。ホーム画面から起動した場合も復元します。保存属性は [`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`](https://developer.apple.com/documentation/security/ksecattraccessiblewhenunlockedthisdeviceonly) で、ロック解除中だけ読み出せ、別端末へ移行しません。起動時に URL を明示した場合は保存済み設定より優先し、別の接続先へ保存済みトークンを送らないようにしています。削除手順は [Cloudflare 開発環境](cloudflare.md#ios-から接続) を参照してください。
+
+実機の `localhost` は iPhone 自身です。Mac のサーバーを使う場合は次の実機向け設定に変更し、Cloudflare を使う場合は初回の接続設定を行ってください。
+
 実機では同じ Wi-Fi 上の Mac の `.local` ホスト名を接続先に指定し、`backend/` で `npx wrangler dev --ip 0.0.0.0 --port 8787` を実行します。Debug 用 Info.plist にはローカル HTTP 接続の ATS 設定とネットワークの利用目的を追加しています。
 
-Release の URL は空欄です。将来公開する際に `Configuration/Release-Info.plist` に HTTPS の接続先を設定してください。Release は開発用の環境変数による上書きや HTTP 接続を使いません。
+Release の URL は空欄です。将来公開する際に `Configuration/Release-Info.plist` に HTTPS の接続先を設定してください。Release は開発用の環境変数・Keychain 設定・HTTP 接続を使いません。
 
 ## コードと変更の確認
 
