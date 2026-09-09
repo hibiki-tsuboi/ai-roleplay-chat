@@ -40,6 +40,14 @@ curl http://localhost:8787/v1/chat \
 
 キー未設定なら `503 not_configured` になります。ローカルの `.dev.vars` を Git に追加しないでください。公開環境のキーは [Workers Secret](https://developers.cloudflare.com/workers/configuration/secrets/) で管理します。
 
+### モデルの切り替え
+
+`backend/wrangler.jsonc` の `vars.OPENAI_MODEL` は現在 `gpt-5.6-luna` です。応答品質を比較するための試用で、Luna のみ推論量を `none` に設定しています。
+
+元のモデルに戻す場合は `OPENAI_MODEL` を `gpt-4.1-mini` に変更し、`backend/` の `npm run dev` を再起動してください。Luna 固有の推論設定は自動的に省略されるため、コードの変更は不要です。`.dev.vars` に `OPENAI_MODEL` を追加している場合は、その上書きも変更または削除してください。
+
+自動テストは両モデルのリクエスト形式をモックで検証します。Luna の実際の返答品質は、上記の curl または iOS アプリから手動で確認してください。
+
 ## iOS
 
 `ios/AIRoleplayChat.xcodeproj` を Xcode で開き、`AIRoleplayChat` スキームを選びます。プロジェクトの現在の設定は iOS 26.5 以降です。既存の Xcode サンプルデータとは別の `RoleplayChat` ストアに会話を保存します。

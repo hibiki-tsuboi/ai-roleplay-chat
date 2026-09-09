@@ -134,6 +134,23 @@ describe("OpenAI proxy", () => {
     });
   });
 
+  it.each(["gpt-5.6-luna", "gpt-4.1-mini"])("supports %s and compatible reasoning settings", async (model) => {
+    const fetch = vi.fn().mockResolvedValue(Response.json(responseBody()));
+    vi.stubGlobal("fetch", fetch);
+    const response = await worker.fetch(request(), { ...env, OPENAI_MODEL: model });
+
+    expect(response.status).toBe(200);
+    const body = JSON.parse(fetch.mock.calls[0]![1].body);
+    expect(body.model).toBe(model);
+    if (model === "gpt-5.6-luna") {
+      expect(body.reasoning).toEqual({ effort: "none" });
+    } else {
+      expect(body).not.toHaveProperty("reasoning");
+    }
+    expect(body.max_output_tokens).toBe(800);
+    expect(body.store).toBe(false);
+  });
+
   it("accepts conversation history at the documented limits", async () => {
     const fetch = vi.fn().mockResolvedValue(Response.json(responseBody()));
     vi.stubGlobal("fetch", fetch);

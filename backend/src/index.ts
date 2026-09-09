@@ -101,6 +101,8 @@ export default {
           input: chat.messages,
           store: false,
           max_output_tokens: 800,
+          // Keep short chat replies within the token budget; omit for GPT-4.1 rollback.
+          reasoning: env.OPENAI_MODEL === "gpt-5.6-luna" ? { effort: "none" } : undefined,
         }),
         signal: AbortSignal.timeout(30_000),
       });

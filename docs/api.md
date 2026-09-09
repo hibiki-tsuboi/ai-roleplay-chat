@@ -74,6 +74,8 @@ Worker の起動確認です。OpenAI への接続や API キーの有効性は�
 
 ## サーバー側の接続
 
-Workers から [OpenAI Responses API](https://developers.openai.com/api/docs/guides/text) を呼び出します。`instructions` にシナリオ、`input` に検証済みメッセージを渡し、`output` 内の `output_text` を取り出します。モデルは `OPENAI_MODEL` で設定し、初期値は `gpt-4.1-mini` です。
+Workers から [OpenAI Responses API](https://developers.openai.com/api/docs/guides/text) を呼び出します。`instructions` にシナリオ、`input` に検証済みメッセージを渡し、`output` 内の `output_text` を取り出します。モデルは `OPENAI_MODEL` で設定し、現在は `gpt-5.6-luna` を試用します。
+
+短い会話の応答時間と出力上限800トークンに合わせ、Luna の場合だけ `reasoning: { effort: "none" }` を指定します（[Luna の公式仕様](https://developers.openai.com/api/docs/models/gpt-5.6-luna)）。`gpt-4.1-mini` に戻す場合はこのパラメーターを送信しません。切り替え手順は [開発ガイド](development.md#モデルの切り替え) を参照してください。
 
 `store: false` を指定し、会話 ID や OpenAI 側の会話状態を使わず毎回履歴を渡します。これは API で後から取得するためのレスポンス保存を無効化する設定で、通信先でのあらゆるデータ保持がなくなることを意味しません。[会話状態の公式仕様](https://developers.openai.com/api/docs/guides/conversation-state)
