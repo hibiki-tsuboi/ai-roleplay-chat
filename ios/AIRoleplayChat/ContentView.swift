@@ -1,61 +1,105 @@
-//
-//  ContentView.swift
-//  AIRoleplayChat
-//
-//  Created by Hibiki Tsuboi on 2026/09/09.
-//
-
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @Query(sort: \Conversation.updatedAt, order: .reverse) private var conversations: [Conversation]
+    @State private var path: [Conversation] = []
+    @State private var errorMessage: String?
 
     var body: some View {
-        NavigationSplitView {
+        NavigationStack(path: $path) {
             List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
+                Section {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Label("あなたは上司役です", systemImage: "person.2.bubble")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Text(Scenario.lateReport.title)
+                            .font(.title2.bold())
+                        Text(Scenario.lateReport.summary)
+                            .foregroundStyle(.secondary)
+                        Button("会話を始める", action: startConversation)
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                            .accessibilityIdentifier("startConversation")
                     }
+                    .padding(.vertical, 12)
+                } header: {
+                    Text("シナリオ")
+                } footer: {
+                    Text("AI が演じる架空の部下との会話練習です。")
                 }
-                .onDelete(perform: deleteItems)
+
+                Section("会話履歴") {
+                    if conversations.isEmpty {
+                        Text("会話を始めると、ここから続きを話せます。")
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 8)
+                            .accessibilityIdentifier("emptyHistory")
+                    }
+                    ForEach(conversations) { conversation in
+                        NavigationLink(value: conversation) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(conversation.title)
+                                    .font(.headline)
+                                Text(conversation.sortedMessages.last?.content ?? "まだメッセージはありません")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                                Text(conversation.updatedAt, format: .dateTime.month().day().hour().minute())
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        .accessibilityIdentifier("conversationRow")
+                    }
+                    .onDelete(perform: deleteConversations)
+                }
             }
+            .navigationTitle("ロールプレイ")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
+                if !conversations.isEmpty { EditButton() }
             }
-        } detail: {
-            Text("Select an item")
+            .navigationDestination(for: Conversation.self) { conversation in
+                ChatView(conversation: conversation, context: modelContext)
+            }
+            .alert("履歴を更新できませんでした", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("閉じる", role: .cancel) { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "")
+            }
         }
     }
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
+    private func startConversation() {
+        let conversation = Conversation()
+        modelContext.insert(conversation)
+        do {
+            try modelContext.save()
+            path.append(conversation)
+        } catch {
+            modelContext.rollback()
+            errorMessage = "端末の空き容量などを確認して、もう一度お試しください。"
         }
     }
 
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
-            }
+    private func deleteConversations(at offsets: IndexSet) {
+        for index in offsets { modelContext.delete(conversations[index]) }
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            errorMessage = "会話を削除できませんでした。もう一度お試しください。"
         }
     }
 }
 
 #Preview {
     ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+        .modelContainer(for: [Conversation.self, ChatMessage.self], inMemory: true)
 }

@@ -2,10 +2,11 @@
 
 ## 初期構成の判断
 
-- iOS はユーザーが Xcode で作成したプロジェクトを `ios/` に配置しています。SwiftUI・SwiftData のテンプレートを出発点にします。
+- iOS はユーザーが Xcode で作成したプロジェクトを `ios/` に配置し、SwiftUI でシナリオ・チャット・履歴画面を実装しています。
 - Workers は標準の `fetch` と小さなハンドラーで実装します。ルーター、OpenAI SDK、DB、ユーザー管理は追加していません。
 - 最初のシナリオ ID は `late-report`。人物・背景・話し方は `backend/src/chat.ts` に置きます。
-- API は非ストリーミングです。履歴の永続化は iOS 側で実装し、Workers に保存しません。
+- API は非ストリーミングです。iOS の SwiftData に `Conversation` と `ChatMessage` を保存し、Workers に保存しません。会話削除時はメッセージも削除します。
+- 送信状態・再送処理は `ChatSession`、HTTP 通信と履歴の送信上限は `ChatAPI.swift` にまとめています。API の応答が成功した往復だけを保存します。
 - iOS と TypeScript の型生成をつなぐ仕組みは導入せず、[API 契約](api.md) とテストで整合性を確認します。
 
 ## バックエンドのコマンド
@@ -41,7 +42,7 @@ curl http://localhost:8787/v1/chat \
 
 ## iOS
 
-`ios/AIRoleplayChat.xcodeproj` を Xcode で開きます。プロジェクトの現在の設定は iOS 26.5 以降です。SwiftData のサンプル `Item` を置き換え、会話・メッセージの保存モデルを実装するところから始めます。
+`ios/AIRoleplayChat.xcodeproj` を Xcode で開き、`AIRoleplayChat` スキームを選びます。プロジェクトの現在の設定は iOS 26.5 以降です。既存の Xcode サンプルデータとは別の `RoleplayChat` ストアに会話を保存します。
 
 リポジトリルートで Simulator 向けにビルドできます。
 
@@ -53,9 +54,35 @@ xcodebuild -project ios/AIRoleplayChat.xcodeproj \
   CODE_SIGNING_ALLOWED=NO build
 ```
 
-iOS のテストターゲットはまだありません。チャットの保存・履歴の切り詰め・通信エラーからの再送を実装する際に、対応するテストを追加してください。
+### 自動テスト
 
-API 接続時は Simulator から `http://localhost:8787` を使用できます。実機からは同じ Wi-Fi 上の Mac のホスト名を指定し、Workers を `npx wrangler dev --ip 0.0.0.0 --port 8787` で起動します。HTTP 用の ATS 設定やローカルネットワークの利用目的は iOS の開発用設定として追加し、公開環境の接続先は HTTPS にしてください。
+`AIRoleplayChat` スキームの `⌘U` で Swift Testing の単体テストを実行できます。会話の保存と再読み込み、関連メッセージの削除、送信する履歴の上限、API 応答の検証、失敗後の再送・キャンセルを確認します。通信は `URLProtocol` で置き換え、実際の AI を呼びません。
+
+CLI では、インストール済み Simulator 名を指定して実行します。
+
+```bash
+xcodebuild -project ios/AIRoleplayChat.xcodeproj \
+  -scheme AIRoleplayChat \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' \
+  -derivedDataPath /tmp/ai-roleplay-chat-derived \
+  CODE_SIGNING_ALLOWED=NO test
+```
+
+画面操作の XCTest は `AIRoleplayChatUITests` スキームです。まず別ターミナルで以下の HTTP モックを起動します（リポジトリルートで実行）。
+
+```bash
+node ios/scripts/mock-chat-server.mjs
+```
+
+そのまま `AIRoleplayChatUITests` スキームでテストを実行します。CLI では上の `-scheme` を `AIRoleplayChatUITests` に変更してください。モックは `localhost:8788` で動き、会話の送信・アプリ再起動後の続行・エラーからの再送・履歴削除を検証します。通常利用の履歴とは別のテスト用ストアを使い、スクリーンショットをテスト結果に添付します。
+
+### ローカル接続
+
+Debug の接続先は `Configuration/Debug-Info.plist` の `http://localhost:8787` です。Simulator から Mac 上のバックエンドに接続できます。Xcode の Edit Scheme → Run → Arguments → Environment Variables に `ROLEPLAY_API_BASE_URL` を追加すると、Debug の接続先を上書きできます。API キーはこの設定に入れません。
+
+実機では同じ Wi-Fi 上の Mac の `.local` ホスト名を接続先に指定し、`backend/` で `npx wrangler dev --ip 0.0.0.0 --port 8787` を実行します。Debug 用 Info.plist にはローカル HTTP 接続の ATS 設定とネットワークの利用目的を追加しています。
+
+Release の URL は空欄です。将来公開する際に `Configuration/Release-Info.plist` に HTTPS の接続先を設定してください。Release は開発用の環境変数による上書きや HTTP 接続を使いません。
 
 ## コードと変更の確認
 
@@ -63,13 +90,17 @@ API 接続時は Simulator から `http://localhost:8787` を使用できます�
 
 バックエンドのテストは `backend/test/*.test.ts` に置き、API の成功・入力不正・外部サービス障害を確認します。カバレッジの数値目標は未設定です。
 
-初期リポジトリにはコミット履歴や PR テンプレートがありません。コミットには変更内容を短く記載し、PR には目的・変更点・検証結果を記載してください。画面変更ではスクリーンショット、対応する issue があればそのリンクを添えます。
+コミットには変更内容を短く記載し、PR には目的・変更点・検証結果を記載してください。画面変更ではスクリーンショット、対応する issue があればそのリンクを添えます。
 
-## 次の実装
+## MVP の手動確認
 
-1. iOS にシナリオ選択とチャット画面を作成する。
-2. [API 契約](api.md) に沿って送信・受信・エラー表示を実装する。
-3. SwiftData に会話とメッセージを保存し、再起動後の履歴表示を確認する。
-4. API キーをローカル設定し、iOS → Workers → OpenAI の実通信を確認する。
+1. バックエンドに API キーを設定し、`npm run dev` で起動する。
+2. Simulator でアプリを起動し、「会話を始める」から田中さんに話しかける。
+3. AI の返答を受信し、2往復以上会話する。
+4. アプリを終了して再起動し、履歴から会話を開いて続きを送信する。
+5. バックエンド停止中に送信し、入力が残ることを確認する。再起動して再送する。
+6. ホームで履歴をスワイプ削除する。
+
+2026-09-09 に iPhone 17 Pro Simulator（iOS 26.5）で、単体テスト8件、モックを使った画面テスト3件、実際の OpenAI と2往復する画面テストを確認しました。実通信ではアプリを再起動して履歴を開き、続きを送信しています。Debug・Release のビルドも確認済みです。
 
 認証は企画書どおり後回しです。現在はローカル開発用として `workers_dev` と `preview_urls` を無効にし、公開ルートを設定していません。外部公開時にはアクセス制御と利用量制限を決めてから公開設定を追加してください。

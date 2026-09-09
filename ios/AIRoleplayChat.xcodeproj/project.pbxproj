@@ -6,11 +6,40 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		AC100000000000000000000A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B6EBDFFF3051171800C3EBDA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B6EBE0063051171800C3EBDA;
+			remoteInfo = AIRoleplayChat;
+		};
+		AC1000000000000000000015 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B6EBDFFF3051171800C3EBDA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B6EBE0063051171800C3EBDA;
+			remoteInfo = AIRoleplayChat;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		AC1000000000000000000002 /* AIRoleplayChatTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = AIRoleplayChatTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AC100000000000000000000D /* AIRoleplayChatUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = AIRoleplayChatUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B6EBE0073051171800C3EBDA /* AIRoleplayChat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AIRoleplayChat.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		AC1000000000000000000003 /* AIRoleplayChatTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AIRoleplayChatTests;
+			sourceTree = "<group>";
+		};
+		AC100000000000000000000E /* AIRoleplayChatUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AIRoleplayChatUITests;
+			sourceTree = "<group>";
+		};
 		B6EBE0093051171800C3EBDA /* AIRoleplayChat */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = AIRoleplayChat;
@@ -19,6 +48,20 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		AC1000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AC1000000000000000000010 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B6EBE0043051171800C3EBDA /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -32,6 +75,8 @@
 		B6EBDFFE3051171800C3EBDA = {
 			isa = PBXGroup;
 			children = (
+				AC1000000000000000000003 /* AIRoleplayChatTests */,
+				AC100000000000000000000E /* AIRoleplayChatUITests */,
 				B6EBE0093051171800C3EBDA /* AIRoleplayChat */,
 				B6EBE0083051171800C3EBDA /* Products */,
 			);
@@ -41,6 +86,8 @@
 			isa = PBXGroup;
 			children = (
 				B6EBE0073051171800C3EBDA /* AIRoleplayChat.app */,
+				AC1000000000000000000002 /* AIRoleplayChatTests.xctest */,
+				AC100000000000000000000D /* AIRoleplayChatUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,6 +95,48 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		AC1000000000000000000001 /* AIRoleplayChatTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AC1000000000000000000007 /* Build configuration list for PBXNativeTarget "AIRoleplayChatTests" */;
+			buildPhases = (
+				AC1000000000000000000004 /* Sources */,
+				AC1000000000000000000005 /* Frameworks */,
+				AC1000000000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AC100000000000000000000B /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				AC1000000000000000000003 /* AIRoleplayChatTests */,
+			);
+			name = AIRoleplayChatTests;
+			productName = AIRoleplayChatTests;
+			productReference = AC1000000000000000000002 /* AIRoleplayChatTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		AC100000000000000000000C /* AIRoleplayChatUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AC1000000000000000000012 /* Build configuration list for PBXNativeTarget "AIRoleplayChatUITests" */;
+			buildPhases = (
+				AC100000000000000000000F /* Sources */,
+				AC1000000000000000000010 /* Frameworks */,
+				AC1000000000000000000011 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AC1000000000000000000016 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				AC100000000000000000000E /* AIRoleplayChatUITests */,
+			);
+			name = AIRoleplayChatUITests;
+			productName = AIRoleplayChatUITests;
+			productReference = AC100000000000000000000D /* AIRoleplayChatUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		B6EBE0063051171800C3EBDA /* AIRoleplayChat */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = B6EBE0143051171900C3EBDA /* Build configuration list for PBXNativeTarget "AIRoleplayChat" */;
@@ -86,9 +175,10 @@
 				};
 			};
 			buildConfigurationList = B6EBE0023051171800C3EBDA /* Build configuration list for PBXProject "AIRoleplayChat" */;
-			developmentRegion = en;
+			developmentRegion = ja;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				ja,
 				en,
 				Base,
 			);
@@ -99,12 +189,28 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				AC1000000000000000000001 /* AIRoleplayChatTests */,
+				AC100000000000000000000C /* AIRoleplayChatUITests */,
 				B6EBE0063051171800C3EBDA /* AIRoleplayChat */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		AC1000000000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AC1000000000000000000011 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B6EBE0053051171800C3EBDA /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -115,6 +221,20 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		AC1000000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AC100000000000000000000F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B6EBE0033051171800C3EBDA /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -124,7 +244,78 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		AC100000000000000000000B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B6EBE0063051171800C3EBDA /* AIRoleplayChat */;
+			targetProxy = AC100000000000000000000A /* PBXContainerItemProxy */;
+		};
+		AC1000000000000000000016 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B6EBE0063051171800C3EBDA /* AIRoleplayChat */;
+			targetProxy = AC1000000000000000000015 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		AC1000000000000000000008 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.hibiki.AIRoleplayChatTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AIRoleplayChat.app/AIRoleplayChat";
+			};
+			name = Debug;
+		};
+		AC1000000000000000000009 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.hibiki.AIRoleplayChatTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AIRoleplayChat.app/AIRoleplayChat";
+			};
+			name = Release;
+		};
+		AC1000000000000000000013 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.hibiki.AIRoleplayChatUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = AIRoleplayChat;
+			};
+			name = Debug;
+		};
+		AC1000000000000000000014 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.hibiki.AIRoleplayChatUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = AIRoleplayChat;
+			};
+			name = Release;
+		};
 		B6EBE0123051171900C3EBDA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -256,6 +447,7 @@
 				DEVELOPMENT_TEAM = AK92W9FN2D;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Configuration/Debug-Info.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -288,6 +480,7 @@
 				DEVELOPMENT_TEAM = AK92W9FN2D;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Configuration/Release-Info.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -313,6 +506,24 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		AC1000000000000000000007 /* Build configuration list for PBXNativeTarget "AIRoleplayChatTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AC1000000000000000000008 /* Debug */,
+				AC1000000000000000000009 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AC1000000000000000000012 /* Build configuration list for PBXNativeTarget "AIRoleplayChatUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AC1000000000000000000013 /* Debug */,
+				AC1000000000000000000014 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		B6EBE0023051171800C3EBDA /* Build configuration list for PBXProject "AIRoleplayChat" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

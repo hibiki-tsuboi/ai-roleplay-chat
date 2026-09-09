@@ -1,32 +1,42 @@
-//
-//  AIRoleplayChatApp.swift
-//  AIRoleplayChat
-//
-//  Created by Hibiki Tsuboi on 2026/09/09.
-//
-
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 @main
 struct AIRoleplayChatApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
+    @State private var store = Result { try makeContainer() }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            switch store {
+            case .success(let container):
+                ContentView()
+                    .modelContainer(container)
+            case .failure:
+                ContentUnavailableView {
+                    Label("会話履歴を開けませんでした", systemImage: "externaldrive.badge.exclamationmark")
+                } description: {
+                    Text("端末の空き容量などを確認して、もう一度お試しください。")
+                } actions: {
+                    Button("再試行") { store = Result { try Self.makeContainer() } }
+                }
+            }
         }
-        .modelContainer(sharedModelContainer)
+    }
+
+    private static func makeContainer() throws -> ModelContainer {
+        // Keep the original Xcode sample's Item store intact.
+        var storeName = "RoleplayChat"
+        #if DEBUG
+        if let testID = ProcessInfo.processInfo.environment["ROLEPLAY_TEST_STORE"],
+           let uuid = UUID(uuidString: testID) {
+            storeName = "UITests-\(uuid.uuidString)"
+        }
+        #endif
+        let schema = Schema([Conversation.self, ChatMessage.self])
+        let directory = URL.applicationSupportDirectory
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("\(storeName).store")
+        let configuration = ModelConfiguration(storeName, schema: schema, url: url, cloudKitDatabase: .none)
+        return try ModelContainer(for: schema, configurations: [configuration])
     }
 }
