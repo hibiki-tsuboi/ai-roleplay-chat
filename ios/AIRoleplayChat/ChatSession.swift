@@ -8,6 +8,8 @@ final class ChatSession {
     var draft = ""
     private(set) var pendingText: String?
     private(set) var errorMessage: String?
+    private(set) var isEvaluating = false
+    private(set) var evaluationError: String?
 
     let conversation: Conversation
     private let context: ModelContext
@@ -21,7 +23,7 @@ final class ChatSession {
 
     var isSending: Bool { pendingText != nil }
     var draftLength: Int { draft.trimmingCharacters(in: .whitespacesAndNewlines).utf16.count }
-    var canSend: Bool { !isSending && draftLength > 0 && draftLength <= ChatRequest.maxMessageLength }
+    var canSend: Bool { !conversation.isComplete && !isSending && !isEvaluating && draftLength > 0 && draftLength <= ChatRequest.maxMessageLength }
 
     func send() async {
         guard canSend else { return }
@@ -35,7 +37,8 @@ final class ChatSession {
                 scenarioID: conversation.scenarioID,
                 provider: conversation.provider,
                 history: conversation.sortedMessages.map { APIMessage(role: $0.role, content: $0.content) },
-                text: text
+                text: text,
+                isPractice: conversation.isPractice
             )
             let reply = try await api.send(request)
             try Task.checkCancellation()
@@ -51,10 +54,35 @@ final class ChatSession {
                 return
             }
             draft = ""
+            pendingText = nil
+            await evaluateIfNeeded()
         } catch is CancellationError {
             // Keep the draft available when a request is cancelled.
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    func evaluateIfNeeded() async {
+        guard conversation.isComplete, conversation.evaluation == nil, !isSending, !isEvaluating else { return }
+        isEvaluating = true
+        evaluationError = nil
+        defer { isEvaluating = false }
+        do {
+            let result = try await api.evaluate(EvaluationRequest(conversation: conversation))
+            try Task.checkCancellation()
+            conversation.evaluationData = try JSONEncoder().encode(result)
+            conversation.updatedAt = Date()
+            do {
+                try context.save()
+            } catch {
+                context.rollback()
+                evaluationError = "結果を保存できませんでした。端末の空き容量などを確認し、結果を再取得してください。"
+            }
+        } catch is CancellationError {
+            // The five saved turns remain complete; reopening can resume just the evaluation.
+        } catch {
+            evaluationError = error.localizedDescription
         }
     }
 }

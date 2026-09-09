@@ -4,17 +4,21 @@
 
 接続先: `https://ai-roleplay-chat-api-dev.hibiki-apps.workers.dev`
 
+2026-09-09 22:41 JST に5往復の練習・採点 API を反映しました。現在のバージョンは `b060487a-c33c-4b25-a3c9-69f3b4cde948` で、トラフィックは100%切り替え済みです。既存の Secret を保持しています。最新版のアプリを更新インストールし、新しい練習を始めてください。
+
+デプロイ後はヘルスチェック200、採点 API の GET は405、チャット・採点の認証なしは401、認証ありの不正な入力・5往復未満の採点は400を確認しました。確認で実際の AI は呼び出していません。
+
 2026-09-09 に初回デプロイしました。ヘルスチェック200、認証なしのチャット401、認証あり・不正な入力400を確認済みです。このデプロイ確認では OpenAI を呼び出していません。バックエンドのモックテスト46件、iOS の単体テスト10件、Debug・Release ビルドも成功しています。
 
-同日20:11 JST に AI 選択対応を反映しました。現在のバージョンは `0df32fa0-7f80-4136-a78e-e8ecbc439022` です。OpenAI / Gemini の選択に対応し、Gemini の Secret を追加しました。モックテスト86件、型チェック、両環境のビルド、上記のヘルスチェック・認証・入力検証を確認しています。この更新では実際の AI は呼び出していません。
+同日20:11 JST に AI 選択対応をバージョン `0df32fa0-7f80-4136-a78e-e8ecbc439022` で反映しました。OpenAI / Gemini の選択に対応し、Gemini の Secret を追加しました。モックテスト86件、型チェック、両環境のビルド、上記のヘルスチェック・認証・入力検証を確認しています。この更新では実際の AI は呼び出していません。
 
 ## 構成
 
 - Worker: `ai-roleplay-chat-api-dev`（Wrangler の `dev` 環境）。`workers.dev` の HTTPS URL を使います。
 - `GET /health` は認証不要です。AI への通信は発生しません。
-- `POST /v1/chat` は専用の `DEV_ACCESS_TOKEN` が必要です。未設定なら503、認証失敗なら401で拒否し、AI を呼びません。
+- `POST /v1/chat` と `POST /v1/evaluation` は専用の `DEV_ACCESS_TOKEN` が必要です。未設定なら503、認証失敗なら401で拒否し、AI を呼びません。
 - `provider` は `openai` / `gemini` を選べます。モデルはそれぞれ `gpt-5.6-luna` / `gemini-3.5-flash-lite`。省略時は OpenAI を使います。
-- 正常な認証・入力の後に、チャット全体で10回/60秒の制限を適用します。超過すると429です。[Workers Rate Limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) は Cloudflare 拠点ごとの近似的な制限で、全世界共通の厳密な課金上限ではありません。
+- 正常な認証・入力の後に、チャットと採点を合わせて10回/60秒の制限を適用します。5往復の練習はチャット5回＋採点1回です。超過すると429です。[Workers Rate Limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) は Cloudflare 拠点ごとの近似的な制限で、全世界共通の厳密な課金上限ではありません。
 - OpenAI・Gemini の API キーと開発用トークンは [Workers Secret](https://developers.cloudflare.com/workers/configuration/secrets/) に保存します。プレビュー URL は無効です。
 
 ## 初回デプロイ
@@ -73,7 +77,7 @@ OpenAI を試すときは `provider` を `openai` にします。成功応答の
 
 ## iOS から接続
 
-アプリの AI 選択に対応したバックエンドをデプロイ済みです。以下の接続設定を使い、会話開始画面で OpenAI / Gemini を選択してください。
+AI 選択・5往復の練習・採点に対応したバックエンドをデプロイ済みです。以下の接続設定を使い、最新版アプリの会話開始画面で OpenAI / Gemini を選択してください。
 
 Xcode の Manage Schemes で `AIRoleplayChat` を複製し、`CloudflareDev` などの名前にして Shared をオフにします。その個人用スキームの Edit Scheme → Run → Arguments → Environment Variables に以下を追加します。トークンを含むスキームは共有・コミットしないでください。
 

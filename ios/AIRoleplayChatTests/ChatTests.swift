@@ -41,6 +41,7 @@ private func jsonBody(of request: URLRequest) throws -> [String: Any] {
 @Suite(.serialized)
 @MainActor
 struct ChatTests {
+    private static let evaluationJSON = #"{"criteria":{"listening":{"score":20,"reason":"事情を確認できました。"},"consideration":{"score":21,"reason":"責めずに応じました。"},"clarity":{"score":19,"reason":"指示が伝わりました。"},"action":{"score":18,"reason":"期限も確認しましょう。"}},"totalScore":78,"goodPoint":"先に事情を聞けました。","improvement":"報告時刻を決めましょう。","rephrase":"15時に進捗を教えてもらえる？"}"#
     private func client() -> ChatAPI {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubURLProtocol.self]
@@ -82,7 +83,7 @@ struct ChatTests {
             #expect(json["provider"] as? String == provider.rawValue)
             #expect(json["model"] == nil)
             return (200, try JSONSerialization.data(withJSONObject: [
-                "provider": provider.rawValue,
+                "provider": provider.rawValue, "practice": "five-turns",
                 "message": ["role": "assistant", "content": "あと少しです。"],
             ]))
         }
@@ -129,7 +130,7 @@ struct ChatTests {
         StubURLProtocol.handler = { request in
             let json = try jsonBody(of: request)
             #expect(json["provider"] == nil)
-            return (200, Data(#"{"provider":"gemini","message":{"role":"assistant","content":"あと少しです。"}}"#.utf8))
+            return (200, Data(#"{"practice":"five-turns","provider":"gemini","message":{"role":"assistant","content":"あと少しです。"}}"#.utf8))
         }
         let session = ChatSession(conversation: conversation, context: context, api: client())
         session.draft = "資料はできた？"
@@ -157,7 +158,8 @@ struct ChatTests {
     func conversationSurvivesStoreReopeningAndPreservesOrder(provider: AIProvider) throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
+        // SwiftData can retain SQLite handles beyond this scope. Let the test app's
+        // temporary directory own cleanup instead of unlinking a database still in use.
         let url = directory.appendingPathComponent("history.store")
         do {
             let store = try container(url: url)
@@ -197,7 +199,7 @@ struct ChatTests {
             #expect(request.httpMethod == "POST")
             #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
             #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
-            return (200, Data(#"{"message":{"role":"assistant","content":"すみません。"}}"#.utf8))
+            return (200, Data(#"{"practice":"five-turns","message":{"role":"assistant","content":"すみません。"}}"#.utf8))
         }
         let request = try ChatRequest(scenarioID: "late-report", history: [], text: "状況は？")
         let reply = try await client().send(request)
@@ -209,7 +211,7 @@ struct ChatTests {
         StubURLProtocol.handler = { request in
             #expect(request.url?.absoluteString == "https://example.test/v1/chat")
             #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer development-test-token")
-            return (200, Data(#"{"message":{"role":"assistant","content":"すみません。"}}"#.utf8))
+            return (200, Data(#"{"practice":"five-turns","message":{"role":"assistant","content":"すみません。"}}"#.utf8))
         }
         var api = client()
         api.baseURL = URL(string: "https://example.test")
@@ -231,8 +233,8 @@ struct ChatTests {
     #endif
 
     @Test(arguments: [
-        #"{"message":{"role":"user","content":"wrong role"}}"#,
-        #"{"message":{"role":"assistant","content":" "}}"#,
+        #"{"practice":"five-turns","message":{"role":"user","content":"wrong role"}}"#,
+        #"{"practice":"five-turns","message":{"role":"assistant","content":" "}}"#,
         #"{"unexpected":true}"#,
         "not JSON",
     ])
@@ -259,7 +261,7 @@ struct ChatTests {
         #expect(conversation.messages.isEmpty)
         #expect(session.canSend)
 
-        StubURLProtocol.handler = { _ in (200, Data(#"{"message":{"role":"assistant","content":"あと少しです。"}}"#.utf8)) }
+        StubURLProtocol.handler = { _ in (200, Data(#"{"practice":"five-turns","message":{"role":"assistant","content":"あと少しです。"}}"#.utf8)) }
         await session.send()
         #expect(session.errorMessage == nil)
         #expect(session.draft.isEmpty)
@@ -279,5 +281,171 @@ struct ChatTests {
         #expect(session.draft == "資料はできた？")
         #expect(conversation.messages.isEmpty)
         #expect(!session.isSending)
+    }
+
+    @Test(arguments: [AIProvider.openai, .gemini])
+    func fiveTurnsEndAutomaticallyAndPersistOneEvaluation(provider: AIProvider) async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // SwiftData can retain SQLite handles beyond this scope. Let the test app's
+        // temporary directory own cleanup instead of unlinking a database still in use.
+        let url = directory.appendingPathComponent("practice.store")
+        var chatCalls = 0
+        var evaluationCalls = 0
+        StubURLProtocol.handler = { request in
+            let json = try jsonBody(of: request)
+            #expect(json["provider"] as? String == provider.rawValue)
+            #expect(json["practice"] as? String == "five-turns")
+            let messages = try #require(json["messages"] as? [[String: String]])
+            if request.url?.path == "/v1/evaluation" {
+                evaluationCalls += 1
+                #expect(messages.count == 10)
+                #expect(messages.first?["content"] == "質問1")
+                #expect(messages.last?["role"] == "assistant")
+                return (200, Data("{\"provider\":\"\(provider.rawValue)\",\"evaluation\":\(Self.evaluationJSON)}".utf8))
+            }
+            chatCalls += 1
+            #expect(messages.count == chatCalls * 2 - 1)
+            return (200, Data("{\"provider\":\"\(provider.rawValue)\",\"practice\":\"five-turns\",\"message\":{\"role\":\"assistant\",\"content\":\"承知しました。\"}}".utf8))
+        }
+        do {
+            let store = try container(url: url)
+            let context = ModelContext(store)
+            let conversation = Conversation(provider: provider)
+            context.insert(conversation)
+            try context.save()
+            let session = ChatSession(conversation: conversation, context: context, api: client())
+            for turn in 1...5 {
+                session.draft = "質問\(turn)"
+                await session.send()
+                #expect(session.errorMessage == nil)
+                #expect(conversation.completedTurns == turn)
+            }
+            #expect(conversation.isComplete)
+            #expect(conversation.evaluation?.totalScore == 78)
+            session.draft = "6回目は送信しない"
+            #expect(!session.canSend)
+            await session.send()
+            await session.evaluateIfNeeded()
+            #expect(chatCalls == 5)
+            #expect(evaluationCalls == 1)
+        }
+        let reopened = try container(url: url)
+        let context = ModelContext(reopened)
+        let saved = try #require(context.fetch(FetchDescriptor<Conversation>()).first)
+        #expect(saved.isComplete)
+        #expect(saved.messages.count == 10)
+        #expect(saved.evaluation?.totalScore == 78)
+        #expect(saved.provider == provider)
+        await ChatSession(conversation: saved, context: context, api: client()).evaluateIfNeeded()
+        #expect(evaluationCalls == 1)
+    }
+
+    @Test func failedFifthReplyDoesNotAdvanceAndEvaluationRetryNeverResendsChat() async throws {
+        let store = try container()
+        let context = ModelContext(store)
+        let conversation = Conversation(provider: .gemini)
+        context.insert(conversation)
+        for _ in 0..<4 { conversation.appendTurn(userText: "状況は？", reply: "あと少しです。") }
+        try context.save()
+        let session = ChatSession(conversation: conversation, context: context, api: client())
+        session.draft = "15時に報告してもらえる？"
+        StubURLProtocol.handler = { _ in throw URLError(.timedOut) }
+        await session.send()
+        #expect(conversation.completedTurns == 4)
+        #expect(session.canSend)
+        #expect(!session.draft.isEmpty)
+
+        StubURLProtocol.handler = { request in
+            if request.url?.path == "/v1/evaluation" { throw URLError(.timedOut) }
+            return (200, Data(#"{"provider":"gemini","practice":"five-turns","message":{"role":"assistant","content":"承知しました。"}}"#.utf8))
+        }
+        await session.send()
+        #expect(conversation.messages.count == 10)
+        #expect(conversation.isComplete)
+        #expect(conversation.evaluation == nil)
+        #expect(session.evaluationError != nil)
+        #expect(session.errorMessage == nil)
+        #expect(session.draft.isEmpty)
+        #expect(!session.isEvaluating)
+
+        StubURLProtocol.handler = { request in
+            #expect(request.url?.path == "/v1/evaluation")
+            return (200, Data("{\"provider\":\"gemini\",\"evaluation\":\(Self.evaluationJSON)}".utf8))
+        }
+        let resumed = ChatSession(conversation: conversation, context: context, api: client())
+        await resumed.evaluateIfNeeded()
+        #expect(conversation.messages.count == 10)
+        #expect(conversation.evaluation?.totalScore == 78)
+        #expect(resumed.evaluationError == nil)
+    }
+
+    @Test(arguments: ["bad-total", "bad-provider", "empty-feedback", "out-of-range", "cancelled"])
+    func unusableEvaluationLeavesFinishedConversationAvailableForRetry(failure: String) async throws {
+        let store = try container()
+        let context = ModelContext(store)
+        let conversation = Conversation(provider: .gemini)
+        context.insert(conversation)
+        for _ in 0..<5 { conversation.appendTurn(userText: "状況は？", reply: "あと少しです。") }
+        try context.save()
+        StubURLProtocol.handler = { _ in
+            if failure == "cancelled" { throw URLError(.cancelled) }
+            var evaluation = Self.evaluationJSON
+            if failure == "bad-total" { evaluation = evaluation.replacingOccurrences(of: "\"totalScore\":78", with: "\"totalScore\":100") }
+            if failure == "empty-feedback" { evaluation = evaluation.replacingOccurrences(of: "先に事情を聞けました。", with: " ") }
+            if failure == "out-of-range" { evaluation = evaluation.replacingOccurrences(of: "\"score\":20", with: "\"score\":26") }
+            let provider = failure == "bad-provider" ? "openai" : "gemini"
+            return (200, Data("{\"provider\":\"\(provider)\",\"evaluation\":\(evaluation)}".utf8))
+        }
+        let session = ChatSession(conversation: conversation, context: context, api: client())
+        await session.evaluateIfNeeded()
+        #expect(conversation.isComplete)
+        #expect(conversation.messages.count == 10)
+        #expect(conversation.evaluationData == nil)
+        #expect(!session.isEvaluating)
+        #expect(!session.canSend)
+        if failure != "cancelled" { #expect(session.evaluationError != nil) }
+    }
+
+    @Test func practicePreservesLongHistoryAndRejectsSixthTurn() throws {
+        let history = (0..<8).map { APIMessage(role: $0 % 2 == 0 ? .user : .assistant, content: String(repeating: "あ", count: 4_000)) }
+        let request = try ChatRequest(scenarioID: "late-report", history: history, text: "最後の質問", isPractice: true)
+        #expect(request.messages.count == 9)
+        #expect(request.messages.first?.content == history.first?.content)
+        #expect(request.practice == "five-turns")
+        #expect(throws: ChatAPIError.self) {
+            try ChatRequest(scenarioID: "late-report", history: history + Array(history.prefix(2)), text: "6回目", isPractice: true)
+        }
+    }
+
+    @Test func evaluationDoesNotStartBeforeFiveTurns() async throws {
+        let store = try container()
+        let context = ModelContext(store)
+        let conversation = Conversation(provider: .gemini)
+        context.insert(conversation)
+        for _ in 0..<4 { conversation.appendTurn(userText: "状況は？", reply: "あと少しです。") }
+        StubURLProtocol.handler = { _ in
+            Issue.record("Incomplete practice must not be evaluated")
+            return (200, Data())
+        }
+        await ChatSession(conversation: conversation, context: context, api: client()).evaluateIfNeeded()
+        #expect(conversation.evaluationData == nil)
+    }
+
+    @Test func oldBackendCannotSilentlyStartANewPractice() async throws {
+        let store = try container()
+        let context = ModelContext(store)
+        let conversation = Conversation(provider: .gemini)
+        context.insert(conversation)
+        try context.save()
+        StubURLProtocol.handler = { _ in
+            (200, Data(#"{"provider":"gemini","message":{"role":"assistant","content":"あと少しです。"}}"#.utf8))
+        }
+        let session = ChatSession(conversation: conversation, context: context, api: client())
+        session.draft = "進み具合は？"
+        await session.send()
+        #expect(session.errorMessage?.contains("未対応") == true)
+        #expect(session.draft == "進み具合は？")
+        #expect(conversation.messages.isEmpty)
     }
 }

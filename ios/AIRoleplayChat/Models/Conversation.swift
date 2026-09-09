@@ -11,6 +11,9 @@ final class Conversation {
     var updatedAt: Date
     // Older conversations have no recorded provider; retain that distinction when migrating.
     var providerID: String? = nil
+    // Nil preserves free-form conversations created before five-turn practice.
+    var practiceVersion: Int? = nil
+    var evaluationData: Data? = nil
     @Relationship(deleteRule: .cascade, inverse: \ChatMessage.conversation)
     var messages: [ChatMessage] = []
 
@@ -20,6 +23,7 @@ final class Conversation {
         title = scenario.title
         characterName = scenario.characterName
         providerID = provider?.rawValue
+        practiceVersion = 1
         let now = Date()
         createdAt = now
         updatedAt = now
@@ -31,6 +35,17 @@ final class Conversation {
 
     var provider: AIProvider? {
         providerID.flatMap(AIProvider.init(rawValue:))
+    }
+
+    static let turnLimit = 5
+    var isPractice: Bool { practiceVersion == 1 }
+    var completedTurns: Int { messages.filter { $0.role == .assistant }.count }
+    var isComplete: Bool { isPractice && completedTurns >= Self.turnLimit }
+    var evaluation: PracticeEvaluation? {
+        guard let evaluationData,
+              let value = try? JSONDecoder().decode(PracticeEvaluation.self, from: evaluationData),
+              value.isValid else { return nil }
+        return value
     }
 
     func appendTurn(userText: String, reply: String) {

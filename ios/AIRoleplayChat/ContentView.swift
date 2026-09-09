@@ -20,6 +20,11 @@ struct ContentView: View {
                             .font(.title2.bold())
                         Text(Scenario.lateReport.summary)
                             .foregroundStyle(.secondary)
+                        Label("5往復で、あなたの上司度をチェック", systemImage: "flag.checkered")
+                            .font(.subheadline.weight(.medium))
+                        Text("事情を聞く・相手への配慮・指示の明確さ・次の行動の合意を、各25点で振り返ります。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                         VStack(alignment: .leading, spacing: 8) {
                             Text("会話する AI")
                                 .font(.subheadline.weight(.medium))
@@ -45,7 +50,7 @@ struct ContentView: View {
 
                 Section("会話履歴") {
                     if conversations.isEmpty {
-                        Text("会話を始めると、ここから続きを話せます。")
+                        Text("練習の続きや結果を、ここから振り返れます。")
                             .foregroundStyle(.secondary)
                             .padding(.vertical, 8)
                             .accessibilityIdentifier("emptyHistory")
@@ -55,6 +60,15 @@ struct ContentView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(conversation.title)
                                     .font(.headline)
+                                if let result = conversation.evaluation {
+                                    Text("上司度 \(result.totalScore)点 · 練習完了")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(Color.accentColor)
+                                } else if conversation.isPractice {
+                                    Text(conversation.isComplete ? "会話終了 · 結果を取得" : "\(conversation.completedTurns) / 5 往復 · 練習中")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                                 Text(conversation.sortedMessages.last?.content ?? "まだメッセージはありません")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
@@ -81,7 +95,10 @@ struct ContentView: View {
                 if !conversations.isEmpty { EditButton() }
             }
             .navigationDestination(for: Conversation.self) { conversation in
-                ChatView(conversation: conversation, context: modelContext)
+                ChatView(conversation: conversation, context: modelContext) {
+                    startConversation(provider: conversation.provider ?? selectedProvider, replacingCurrent: true)
+                }
+                .id(conversation.id)
             }
             .alert("履歴を更新できませんでした", isPresented: Binding(
                 get: { errorMessage != nil },
@@ -95,11 +112,16 @@ struct ContentView: View {
     }
 
     private func startConversation() {
-        let conversation = Conversation(provider: selectedProvider)
+        startConversation(provider: selectedProvider, replacingCurrent: false)
+    }
+
+    private func startConversation(provider: AIProvider, replacingCurrent: Bool) {
+        let conversation = Conversation(provider: provider)
         modelContext.insert(conversation)
         do {
             try modelContext.save()
-            path.append(conversation)
+            if replacingCurrent { path = [conversation] }
+            else { path.append(conversation) }
         } catch {
             modelContext.rollback()
             errorMessage = "端末の空き容量などを確認して、もう一度お試しください。"

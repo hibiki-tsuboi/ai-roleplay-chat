@@ -22,7 +22,9 @@ export function resolveAIConfig(env: AIEnv, selectedProvider?: AIProvider): AICo
   return apiKey && model ? { provider, apiKey, model } : null;
 }
 
-export function fetchAI(config: AIConfig, messages: ChatMessage[]): Promise<Response> {
+export function fetchAI(config: AIConfig, messages: ChatMessage[], options: {
+  instructions?: string; schema?: Record<string, unknown>; maxOutputTokens?: number;
+} = {}): Promise<Response> {
   const gemini = config.provider === "gemini";
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (gemini) headers["x-goog-api-key"] = config.apiKey;
@@ -35,23 +37,25 @@ export function fetchAI(config: AIConfig, messages: ChatMessage[]): Promise<Resp
     headers,
     body: JSON.stringify(gemini ? {
       model: config.model,
-      system_instruction: scenarioInstructions,
+      system_instruction: options.instructions ?? scenarioInstructions,
+      response_format: options.schema ? { type: "text", mime_type: "application/json", schema: options.schema } : undefined,
       input: messages.map((message) => ({
         type: message.role === "user" ? "user_input" : "model_output",
         content: [{ type: "text", text: message.content }],
       })),
       store: false,
       generation_config: {
-        max_output_tokens: 800,
+        max_output_tokens: options.maxOutputTokens ?? 800,
         thinking_level: config.model === "gemini-3.5-flash-lite" ? "minimal" : undefined,
         thinking_summaries: "none",
       },
     } : {
       model: config.model,
-      instructions: scenarioInstructions,
+      instructions: options.instructions ?? scenarioInstructions,
+      text: options.schema ? { format: { type: "json_schema", name: "practice_evaluation", strict: true, schema: options.schema } } : undefined,
       input: messages,
       store: false,
-      max_output_tokens: 800,
+      max_output_tokens: options.maxOutputTokens ?? 800,
       // Keep short chat replies within the token budget; omit for GPT-4.1 rollback.
       reasoning: config.model === "gpt-5.6-luna" ? { effort: "none" } : undefined,
     }),

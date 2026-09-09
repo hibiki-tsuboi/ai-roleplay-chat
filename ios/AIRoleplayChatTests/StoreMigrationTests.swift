@@ -55,12 +55,97 @@ private enum LegacyChatStore {
     }
 }
 
+// Model shape from the release immediately before five-turn practice.
+private enum ProviderChatStore {
+    @Model
+    final class Conversation {
+        var id: UUID
+        var scenarioID: String
+        var title: String
+        var characterName: String
+        var createdAt: Date
+        var updatedAt: Date
+        var providerID: String? = nil
+        @Relationship(deleteRule: .cascade, inverse: \ChatMessage.conversation)
+        var messages: [ChatMessage] = []
+
+        init(scenario: Scenario = .lateReport) {
+            id = UUID()
+            scenarioID = scenario.id
+            title = scenario.title
+            characterName = scenario.characterName
+            let now = Date()
+            createdAt = now
+            updatedAt = now
+        }
+
+        var sortedMessages: [ChatMessage] {
+            messages.sorted { $0.position < $1.position }
+        }
+
+        func appendTurn(userText: String, reply: String) {
+            let position = (messages.map(\.position).max() ?? -1) + 1
+            messages.append(ChatMessage(role: .user, content: userText, position: position))
+            messages.append(ChatMessage(role: .assistant, content: reply, position: position + 1))
+            updatedAt = Date()
+        }
+    }
+
+    @Model
+    final class ChatMessage {
+        var id: UUID
+        var role: MessageRole
+        var content: String
+        var position: Int
+        var conversation: Conversation?
+
+        init(role: MessageRole, content: String, position: Int) {
+            id = UUID()
+            self.role = role
+            self.content = content
+            self.position = position
+        }
+    }
+}
+
 @MainActor
 struct StoreMigrationTests {
+    @Test func existingProviderAndLongConversationSurvivePracticeMigration() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // SwiftData can retain SQLite handles beyond this scope. Let the test app's
+        // temporary directory own cleanup instead of unlinking a database still in use.
+        let url = directory.appendingPathComponent("previous.store")
+        do {
+            let schema = Schema([ProviderChatStore.Conversation.self, ProviderChatStore.ChatMessage.self])
+            let configuration = ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
+            let container = try ModelContainer(for: schema, configurations: [configuration])
+            let context = ModelContext(container)
+            let conversation = ProviderChatStore.Conversation()
+            conversation.providerID = "gemini"
+            context.insert(conversation)
+            for _ in 0..<6 { conversation.appendTurn(userText: "進み具合は？", reply: "あと少しです。") }
+            try context.save()
+        }
+        let schema = Schema([Conversation.self, ChatMessage.self])
+        let configuration = ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+        let conversation = try #require(context.fetch(FetchDescriptor<Conversation>()).first)
+        #expect(conversation.provider == .gemini)
+        #expect(conversation.practiceVersion == nil)
+        #expect(!conversation.isComplete)
+        #expect(conversation.messages.count == 12)
+        #expect(conversation.evaluationData == nil)
+        #expect(conversation.messages.allSatisfy { $0.conversation?.id == conversation.id })
+        #expect(Conversation(provider: .gemini).isPractice)
+    }
+
     @Test func existingHistoryMigratesWithoutGuessingItsProvider() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
+        // SwiftData can retain SQLite handles beyond this scope. Let the test app's
+        // temporary directory own cleanup instead of unlinking a database still in use.
         let url = directory.appendingPathComponent("legacy.store")
         do {
             let schema = Schema([LegacyChatStore.Conversation.self, LegacyChatStore.ChatMessage.self])
@@ -78,6 +163,9 @@ struct StoreMigrationTests {
         let context = ModelContext(container)
         let conversation = try #require(context.fetch(FetchDescriptor<Conversation>()).first)
         #expect(conversation.providerID == nil)
+        #expect(conversation.practiceVersion == nil)
+        #expect(!conversation.isPractice)
+        #expect(conversation.evaluationData == nil)
         #expect(conversation.sortedMessages.map(\.content) == ["進み具合は？", "あと少しです。"])
         #expect(conversation.messages.allSatisfy { $0.conversation?.id == conversation.id })
         conversation.providerID = AIProvider.gemini.rawValue

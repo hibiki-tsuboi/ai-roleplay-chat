@@ -1,5 +1,6 @@
 import { type AIEnv, extractReply, fetchAI, resolveAIConfig } from "./ai";
-import { parseChatRequest } from "./chat";
+import { chatInstructions, parseChatRequest, parseEvaluationRequest } from "./chat";
+import { evaluationInstructions, evaluationSchema, parseEvaluation } from "./evaluation";
 
 export interface Env extends AIEnv {
   APP_ENV?: string;
@@ -52,7 +53,8 @@ export default {
         ? json({ status: "ok" })
         : json({ error: { code: "method_not_allowed", message: "GET を使用してください。" } }, 405, { Allow: "GET" });
     }
-    if (path !== "/v1/chat") return error(404, "not_found", "API が見つかりません。");
+    const evaluating = path === "/v1/evaluation";
+    if (path !== "/v1/chat" && !evaluating) return error(404, "not_found", "API が見つかりません。");
     if (request.method !== "POST") {
       return json({ error: { code: "method_not_allowed", message: "POST を使用してください。" } }, 405, { Allow: "POST" });
     }
@@ -78,7 +80,7 @@ export default {
     } catch {
       return error(400, "invalid_json", "JSON を読み取れませんでした。");
     }
-    const chat = parseChatRequest(input);
+    const chat = evaluating ? parseEvaluationRequest(input) : parseChatRequest(input);
     if (!chat) return error(400, "invalid_request", "シナリオまたはメッセージの形式を確認してください。");
     const ai = resolveAIConfig(env, chat.provider);
     if (!ai) {
@@ -98,7 +100,11 @@ export default {
     }
 
     try {
-      const upstream = await fetchAI(ai, chat.messages);
+      const upstream = evaluating
+        ? await fetchAI(ai, [{ role: "user", content: JSON.stringify({ transcript: chat.messages }) }], {
+          instructions: evaluationInstructions, schema: evaluationSchema, maxOutputTokens: 2_000,
+        })
+        : await fetchAI(ai, chat.messages, { instructions: chatInstructions(chat) });
       if (!upstream.ok) {
         await upstream.body?.cancel();
         return upstream.status === 429
@@ -107,7 +113,12 @@ export default {
       }
       const reply = extractReply(await upstream.json(), ai.provider);
       if (!reply) return error(502, "invalid_response", "AI の応答を読み取れませんでした。もう一度お試しください。");
-      return json({ provider: ai.provider, message: { role: "assistant", content: reply } });
+      if (evaluating) {
+        const evaluation = parseEvaluation(reply);
+        return evaluation ? json({ provider: ai.provider, evaluation })
+          : error(502, "invalid_response", "評価を読み取れませんでした。結果を再取得してください。");
+      }
+      return json({ provider: ai.provider, practice: chat.practice, message: { role: "assistant", content: reply } });
     } catch (cause) {
       if (cause instanceof Error && (cause.name === "TimeoutError" || cause.name === "AbortError")) {
         return error(504, "upstream_timeout", "AI の応答がタイムアウトしました。もう一度お試しください。");
