@@ -102,7 +102,7 @@ export default {
     try {
       const upstream = evaluating
         ? await fetchAI(ai, [{ role: "user", content: JSON.stringify({ transcript: chat.messages }) }], {
-          instructions: evaluationInstructions, schema: evaluationSchema, maxOutputTokens: 2_000,
+          instructions: evaluationInstructions(chat.scenario), schema: evaluationSchema, maxOutputTokens: 2_000,
         })
         : await fetchAI(ai, chat.messages, { instructions: chatInstructions(chat) });
       if (!upstream.ok) {

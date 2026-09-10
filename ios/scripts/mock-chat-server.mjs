@@ -1,6 +1,7 @@
 // Local HTTP fixture for AIRoleplayChatUITests. Never calls a real AI service.
 import { createServer } from "node:http";
 
+const scenarioIDs = ["late-report", "mistake-report", "low-motivation", "attitude-issue"];
 let failNextRetry = true;
 let failNextEvaluationRetry = true;
 const evaluation = {
@@ -25,7 +26,7 @@ createServer(async (request, response) => {
   }
   try {
     const { scenarioId, messages, provider = "gemini", practice } = JSON.parse(Buffer.concat(chunks).toString());
-    if (scenarioId !== "late-report") throw new Error("Invalid request");
+    if (!scenarioIDs.includes(scenarioId)) throw new Error("Invalid request");
     if (provider !== "openai" && provider !== "gemini") throw new Error("Invalid provider");
     if (request.url === "/v1/evaluation") {
       if (practice !== "five-turns" || messages.length !== 10 || messages.at(-1)?.role !== "assistant") throw new Error("Incomplete practice");

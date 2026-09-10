@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker, { type Env } from "../src/index";
-import { maxMessageLength, scenarioInstructions } from "../src/chat";
+import { maxMessageLength } from "../src/chat";
+import { findScenario, scenarioInstructions } from "../src/scenarios";
 
 const env: Env = {
   APP_ENV: "local",
@@ -89,7 +90,7 @@ describe("Gemini proxy", () => {
     expect(options.signal).toBeInstanceOf(AbortSignal);
     expect(JSON.parse(options.body)).toEqual({
       model: "gemini-3.5-flash-lite",
-      system_instruction: scenarioInstructions,
+      system_instruction: scenarioInstructions(findScenario("late-report")!),
       input: [
         { type: "user_input", content: [{ type: "text", text: messages[0]!.content }] },
         { type: "model_output", content: [{ type: "text", text: messages[1]!.content }] },

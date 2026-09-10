@@ -1,4 +1,4 @@
-import { type AIProvider, type ChatMessage, isRecord, maxMessageLength, scenarioInstructions } from "./chat";
+import { type AIProvider, type ChatMessage, isRecord, maxMessageLength } from "./chat";
 
 export interface AIEnv {
   AI_PROVIDER?: string;
@@ -23,8 +23,8 @@ export function resolveAIConfig(env: AIEnv, selectedProvider?: AIProvider): AICo
 }
 
 export function fetchAI(config: AIConfig, messages: ChatMessage[], options: {
-  instructions?: string; schema?: Record<string, unknown>; maxOutputTokens?: number;
-} = {}): Promise<Response> {
+  instructions: string; schema?: Record<string, unknown>; maxOutputTokens?: number;
+}): Promise<Response> {
   const gemini = config.provider === "gemini";
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (gemini) headers["x-goog-api-key"] = config.apiKey;
@@ -37,7 +37,7 @@ export function fetchAI(config: AIConfig, messages: ChatMessage[], options: {
     headers,
     body: JSON.stringify(gemini ? {
       model: config.model,
-      system_instruction: options.instructions ?? scenarioInstructions,
+      system_instruction: options.instructions,
       response_format: options.schema ? { type: "text", mime_type: "application/json", schema: options.schema } : undefined,
       input: messages.map((message) => ({
         type: message.role === "user" ? "user_input" : "model_output",
@@ -51,7 +51,7 @@ export function fetchAI(config: AIConfig, messages: ChatMessage[], options: {
       },
     } : {
       model: config.model,
-      instructions: options.instructions ?? scenarioInstructions,
+      instructions: options.instructions,
       text: options.schema ? { format: { type: "json_schema", name: "practice_evaluation", strict: true, schema: options.schema } } : undefined,
       input: messages,
       store: false,

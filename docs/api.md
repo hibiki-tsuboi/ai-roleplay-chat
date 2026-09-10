@@ -29,14 +29,14 @@ Cloudflare の開発環境では `Authorization: Bearer <DEV_ACCESS_TOKEN>` も�
 }
 ```
 
-- `scenarioId`: 現在は `late-report`（提出が遅れている部下）のみ。
+- `scenarioId`: `late-report`（提出が遅れている部下・田中）、`mistake-report`（ミスを報告してきた部下・佐藤）、`low-motivation`（やる気が下がっている部下・鈴木）、`attitude-issue`（態度に問題がある部下・山本）のいずれか。未知の値・文字列以外は400。どのシナリオもユーザーが上司役で、採点の4項目は共通です。
 - `provider`: 任意。`openai` または `gemini`。省略時はサーバーの `AI_PROVIDER` を使用。`null`・空文字・未知の値は400。
 - `practice`: 新規練習では `five-turns` を指定。未知の値・`null` は400。省略時は旧アプリ・既存履歴向けの自由形式の会話。
 - `messages`: 練習では1・3・5・7・9件。最初は `user`、以降 `assistant` と交互で、最後は `user`。10件以上・6往復目は400。
 - `content`: 空白のみは不可。1件につき最大4,000 UTF-16コード単位。練習では最大40,000単位まで受け付け、履歴を省略しません。Swift では `String.utf16.count` で数えます。
 - リクエスト本文は最大256 KiB。本文の実バイト数も検証します。
 - 自由形式のみ従来の1〜40件・合計24,000単位を適用し、今回の発言を追加してから上限に収まるまで最古のメッセージを除いて送信します。端末上の履歴は削除しません。
-- モデル名・接続先 URL・役割のプロンプトはサーバー側で固定します。クライアントは `provider` で許可された AI だけを選べます。
+- モデル名・接続先 URL・役割のプロンプトはサーバー側（`backend/src/scenarios.ts`）で固定します。クライアントは `scenarioId` と `provider` で許可された選択肢だけを選べ、人物設定の文面そのものは送れません。
 
 ### 成功レスポンス（200）
 
@@ -59,7 +59,7 @@ Cloudflare の開発環境では `Authorization: Bearer <DEV_ACCESS_TOKEN>` も�
 
 ## POST /v1/evaluation
 
-会話と同じ認証・Content-Type を使います。`scenarioId: "late-report"`、`practice: "five-turns"`、会話で使用した `provider`（必須）、`messages` を送ります。メッセージは古い順に **ちょうど10件**（5往復）、`user` / `assistant` が交互で、最後は `assistant`。1件4,000・合計40,000 UTF-16コード単位以内です。途中の会話や切り詰めた履歴は採点しません。
+会話と同じ認証・Content-Type を使います。会話と同じ `scenarioId`、`practice: "five-turns"`、会話で使用した `provider`（必須）、`messages` を送ります。メッセージは古い順に **ちょうど10件**（5往復）、`user` / `assistant` が交互で、最後は `assistant`。1件4,000・合計40,000 UTF-16コード単位以内です。途中の会話や切り詰めた履歴は採点しません。
 
 ### 成功レスポンス（200）
 
@@ -120,11 +120,11 @@ Workers は状態を持たず、送られた履歴の形式・件数を検証し
 
 リクエストの `provider` を優先し、省略時は `AI_PROVIDER`（`openai` または `gemini`、未設定時は `openai`）で接続先を選びます。選択した接続先の設定が不正なら `503 not_configured` を返し、他社への自動切り替えは行いません。認証・利用制限はどちらの AI にも共通です。
 
-採点では `backend/src/evaluation.ts` のコーチ用指示と固定スキーマを使い、会話全体を評価対象の JSON データとして渡します。OpenAI は [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs) の `text.format`、Gemini は [Interactions の構造化出力](https://ai.google.dev/gemini-api/docs/interactions-breaking-changes-may-2026?hl=en#structured-output-json) の `response_format: { type: "text", mime_type: "application/json", schema: ... }` を指定します。採点の出力上限は2,000トークン、会話は800トークン。モデル・推論設定・30秒タイムアウト・`store: false` は共通です。
+採点では `backend/src/evaluation.ts` のコーチ用指示と固定スキーマを使い、会話全体を評価対象の JSON データとして渡します。コーチ用指示には `scenarioId` に対応する状況説明だけを差し込み、4項目の採点基準はシナリオによらず共通です。OpenAI は [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs) の `text.format`、Gemini は [Interactions の構造化出力](https://ai.google.dev/gemini-api/docs/interactions-breaking-changes-may-2026?hl=en#structured-output-json) の `response_format: { type: "text", mime_type: "application/json", schema: ... }` を指定します。採点の出力上限は2,000トークン、会話は800トークン。モデル・推論設定・30秒タイムアウト・`store: false` は共通です。
 
 ### OpenAI
 
-Workers から [OpenAI Responses API](https://developers.openai.com/api/docs/guides/text) を呼び出します。`instructions` にシナリオ、`input` に検証済みメッセージを渡し、`output` 内の `output_text` を取り出します。モデルは `OPENAI_MODEL` で設定し、現在は `gpt-5.6-luna` を試用します。
+Workers から [OpenAI Responses API](https://developers.openai.com/api/docs/guides/text) を呼び出します。`instructions` に該当シナリオの指示、`input` に検証済みメッセージを渡し、`output` 内の `output_text` を取り出します。モデルは `OPENAI_MODEL` で設定し、現在は `gpt-5.6-luna` を試用します。
 
 短い会話の応答時間と出力上限800トークンに合わせ、Luna の場合だけ `reasoning: { effort: "none" }` を指定します（[Luna の公式仕様](https://developers.openai.com/api/docs/models/gpt-5.6-luna)）。`gpt-4.1-mini` に戻す場合はこのパラメーターを送信しません。切り替え手順は [開発ガイド](development.md#モデルの切り替え) を参照してください。
 
@@ -134,6 +134,6 @@ Workers から [OpenAI Responses API](https://developers.openai.com/api/docs/gui
 
 [Gemini Interactions API](https://ai.google.dev/api/interactions-api) の `POST /v1beta/interactions` を使用し、`GEMINI_API_KEY` を `x-goog-api-key` ヘッダーに設定します。ローカル・Cloudflare 開発環境のモデルは `GEMINI_MODEL=gemini-3.5-flash-lite` です。
 
-`system_instruction` にシナリオを設定し、履歴を `input` の `user_input` / `model_output` ステップへ変換します。`store: false` を指定し、毎回履歴を送信します。これは後から取得するための保存を無効にする設定です（[データ保持の仕様](https://ai.google.dev/gemini-api/docs/interactions-overview#data-retention)）。
+`system_instruction` に該当シナリオの指示を設定し、履歴を `input` の `user_input` / `model_output` ステップへ変換します。`store: false` を指定し、毎回履歴を送信します。これは後から取得するための保存を無効にする設定です（[データ保持の仕様](https://ai.google.dev/gemini-api/docs/interactions-overview#data-retention)）。
 
 出力上限は800トークン、3.5 Flash-Lite の [推論量](https://ai.google.dev/gemini-api/docs/thinking) は `minimal`、推論サマリーは `none` にします。`status: completed` の応答から、`steps` 内の `model_output.content` の `text` だけを返します。思考・未完了の応答は会話本文に使用しません。

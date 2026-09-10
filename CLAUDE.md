@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-「AIロープレ」 — an iPhone app where an AI plays a subordinate (`田中`) and the user practices managing them over five turns, then gets scored, plus a thin Cloudflare Workers proxy in front of OpenAI/Gemini. Monorepo: `ios/`, `backend/`, `docs/`.
+「AIロープレ」 — an iPhone app where an AI plays one of four difficult subordinates and the user practices managing them over five turns, then gets scored, plus a thin Cloudflare Workers proxy in front of OpenAI/Gemini. Monorepo: `ios/`, `backend/`, `docs/`.
 
 ```text
 iPhone (SwiftUI + SwiftData)  ──HTTPS──▶  Worker: GET /health, POST /v1/chat,  ──▶  OpenAI Responses API
@@ -27,7 +27,7 @@ Read `AGENTS.md` and `docs/project-brief.md` before architectural or product-lev
 - `npm run check` — typecheck + tests + dry-run builds of both environments. The gate before deploying or calling a change done
 - `npm run deploy:dev` — deploy `ai-roleplay-chat-api-dev`. Append `-- --secrets-file .dev.vars.dev` only when rotating secrets; plain deploys keep them
 
-Test files: `test/chat.test.ts` (routing, validation, order of checks, OpenAI shape), `test/gemini.test.ts` (provider selection and Gemini shape), `test/practice.test.ts` (five-turn mode and scoring).
+Test files: `test/chat.test.ts` (routing, validation, order of checks, OpenAI shape), `test/gemini.test.ts` (provider selection and Gemini shape), `test/practice.test.ts` (five-turn mode and scoring), `test/scenarios.test.ts` (the scenario registry and its prompts).
 
 Keys: `cp .dev.vars.example .dev.vars`, fill `OPENAI_API_KEY` / `GEMINI_API_KEY`, then restart `npm run dev`. `.dev.vars*` (except `.example`) is gitignored — never commit, print, or paste its contents.
 
@@ -60,11 +60,17 @@ No automated test touches a real AI: backend tests stub global `fetch`, iOS unit
 
 ### The API contract is kept in sync by hand
 
-There is no codegen between Swift and TypeScript. The same limits exist twice — `backend/src/chat.ts` (`scenarioID`, `maxMessages`, `maxMessageLength`, `maxTotalLength`, `practiceTurns`, `practiceMode`, `maxPracticeLength`) and `ios/AIRoleplayChat/Networking/ChatAPI.swift` (`ChatRequest.max*`, `practiceMode`) plus `Conversation.turnLimit` — counted in UTF-16 code units on both sides (`content.length` in TS, `text.utf16.count` in Swift) so they agree exactly. A wire-format change means editing the Worker, `ChatAPI.swift`, `docs/api.md`, and tests on both sides.
+There is no codegen between Swift and TypeScript. The same limits exist twice — `backend/src/chat.ts` (`maxMessages`, `maxMessageLength`, `maxTotalLength`, `practiceTurns`, `practiceMode`, `maxPracticeLength`) and `ios/AIRoleplayChat/Networking/ChatAPI.swift` (`ChatRequest.max*`, `practiceMode`) plus `Conversation.turnLimit` — counted in UTF-16 code units on both sides (`content.length` in TS, `text.utf16.count` in Swift) so they agree exactly. Scenario ids and character names are the other hand-kept pair (`backend/src/scenarios.ts` ↔ `ios/AIRoleplayChat/Models/Scenario.swift`); there is no endpoint that lists scenarios, so adding one means editing both. A wire-format change means editing the Worker, `ChatAPI.swift`, `docs/api.md`, and tests on both sides.
 
 ### The Worker's order of checks is a tested invariant
 
 `backend/src/index.ts` runs one fixed sequence: route → method → dev auth (skipped only when `APP_ENV=local`) → `Content-Type` → 256 KiB body cap (streamed, actual bytes, not just `Content-Length`) → JSON parse → `parseChatRequest`/`parseEvaluationRequest` → `resolveAIConfig` → rate limiter → upstream call. `/v1/chat` and `/v1/evaluation` share every step and differ only in the parser and the prompt. Auth and validation deliberately precede the rate limiter and any AI call, and `/health` requires no token and never reaches an AI. Tests assert that invalid input consumes no quota and that failures make no upstream request, so keep new checks in the same position.
+
+### Scenarios live on the server; the client only names one
+
+`backend/src/scenarios.ts` holds all four (`late-report`/田中, `mistake-report`/佐藤, `low-motivation`/鈴木, `attitude-issue`/山本). Each entry carries the AI's `persona` for chat plus the same setup as a one-line `situation` for the coach. `scenarioInstructions` sandwiches the persona between a shared frame and shared rules, so the rules a client must never be able to displace — don't score, don't speak for the user, this is fiction — always come last. `findScenario` rejects anything not in the list before any AI call, and iOS mirrors only the id, character name, title, summary and opener; the persona text never leaves the server.
+
+Every scenario keeps the user in the manager's seat, which is the only reason one rubric serves all four. Adding a *relationship* (AI as the boss, a client, a mentor) is therefore not just a new registry entry: `evaluationInstructions` and its four criteria are written for a manager, so that change needs a rubric per relationship and a decision about 「上司度」 as a single score.
 
 ### Five-turn practice is a mode, not a replacement
 
@@ -84,11 +90,11 @@ Four criteria score 0–25 each. `parseEvaluation` validates types and ranges an
 
 `ChatSession` is the only writer, in two guarded steps. `send()` parks the in-flight text in `pendingText`, appends the user message and reply together through `Conversation.appendTurn` after the response is validated, `rollback()`s the context if the save fails, and clears the draft only on success. Failed or cancelled sends keep the draft so a resend cannot duplicate a turn; leaving the chat screen cancels the task. Drafts and unfinished turns are never stored. Message order comes from an explicit `position` (`sortedMessages`), not from SwiftData relationship order; deleting a conversation cascades to its messages.
 
-`evaluateIfNeeded()` then writes `evaluationData` under `isComplete && evaluation == nil && !isSending && !isEvaluating`, so scoring runs exactly once and a retry after a failed score never resends a chat turn. `ChatView.task` calls it on appear, which is what resumes a finished-but-unscored conversation after a relaunch. 「もう一度挑戦」 starts a *new* `Conversation` with the same provider and leaves the previous result intact.
+`evaluateIfNeeded()` then writes `evaluationData` under `isComplete && evaluation == nil && !isSending && !isEvaluating`, so scoring runs exactly once and a retry after a failed score never resends a chat turn. `ChatView.task` calls it on appear, which is what resumes a finished-but-unscored conversation after a relaunch. 「もう一度挑戦」 starts a *new* `Conversation` with the same scenario and provider — taken from the finished conversation, not from the home screen's current pick — and leaves the previous result intact.
 
 ### Provider choice belongs to the conversation and is verified
 
-iOS picks OpenAI or Gemini before starting a conversation (`@AppStorage("preferredAIProvider")`, defaulting to Gemini and remembering the last choice), stores it on `Conversation.providerID`, and sends it on every turn. A reply whose `provider` doesn't match the request is rejected (`ChatAPIError.providerMismatch`) and nothing is saved — this covers scoring too, where the provider is mandatory. Conversations created before this feature have `providerID == nil`: they send no provider and adopt whatever the first successful reply reports, rather than guessing. Server-side, `resolveAIConfig` returns `null` → `503 not_configured` instead of silently falling back to the other vendor. Clients choose only a provider; model names, API keys, and the prompts (`scenarioInstructions`, `evaluationInstructions`) stay on the server.
+iOS picks OpenAI or Gemini before starting a conversation (`@AppStorage("preferredAIProvider")`, defaulting to Gemini and remembering the last choice), stores it on `Conversation.providerID`, and sends it on every turn. A reply whose `provider` doesn't match the request is rejected (`ChatAPIError.providerMismatch`) and nothing is saved — this covers scoring too, where the provider is mandatory. Conversations created before this feature have `providerID == nil`: they send no provider and adopt whatever the first successful reply reports, rather than guessing. Server-side, `resolveAIConfig` returns `null` → `503 not_configured` instead of silently falling back to the other vendor. Clients choose only a scenario and a provider; model names, API keys, and the prompt text (`scenarioInstructions`, `evaluationInstructions`) stay on the server.
 
 ### One adapter holds both vendors' differences
 

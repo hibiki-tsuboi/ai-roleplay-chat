@@ -5,7 +5,9 @@ final class ChatUITests: XCTestCase {
     func testFiveTurnResultSurvivesRelaunchAndCanRestartWithOpenAI() {
         let app = launchApp()
         app.segmentedControls["aiProviderPicker"].buttons["OpenAI"].tap()
+        selectScenario("ミスを報告してきた部下", in: app)
         app.buttons["startConversation"].tap()
+        XCTAssertTrue(app.staticTexts["佐藤さんとの会話"].firstMatch.waitForExistence(timeout: 5))
         completePractice(in: app)
         let score = app.otherElements["evaluationScore"].firstMatch
         XCTAssertTrue(score.waitForExistence(timeout: 10))
@@ -24,6 +26,7 @@ final class ChatUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["practiceProgress"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["practiceProgress"].label, "0 / 5 往復")
         XCTAssertEqual(app.staticTexts["conversationProvider"].label, "OpenAI")
+        XCTAssertTrue(app.staticTexts["佐藤さんとの会話"].firstMatch.exists)
         XCTAssertTrue(app.descendants(matching: .any)["messageInput"].firstMatch.exists)
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertEqual(app.buttons.matching(identifier: "conversationRow").count, 2)
@@ -55,6 +58,28 @@ final class ChatUITests: XCTestCase {
                 XCTAssertEqual(XCTWaiter.wait(for: [advanced], timeout: 10), .completed)
             }
         }
+    }
+
+    func testScenarioSelectionStaysWithEachConversation() {
+        let app = launchApp()
+        selectScenario("やる気が下がっている部下", in: app)
+        capture(app, name: "scenario-low-motivation-selected")
+        app.buttons["startConversation"].tap()
+        XCTAssertTrue(app.staticTexts["鈴木さんとの会話"].firstMatch.waitForExistence(timeout: 5))
+        send("Let us talk about the assignment", in: app, expecting: "Gemini:")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        // A different pick for the next practice must not rewrite the one already saved.
+        selectScenario("提出が遅れている部下", in: app)
+        app.buttons["startConversation"].tap()
+        XCTAssertTrue(app.staticTexts["田中さんとの会話"].firstMatch.waitForExistence(timeout: 5))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        let saved = app.buttons.matching(identifier: "conversationRow")
+            .matching(NSPredicate(format: "label CONTAINS %@", "やる気が下がっている部下")).firstMatch
+        XCTAssertTrue(saved.waitForExistence(timeout: 5))
+        saved.tap()
+        XCTAssertTrue(app.staticTexts["鈴木さんとの会話"].firstMatch.waitForExistence(timeout: 5))
     }
 
     func testProviderSelectionStaysWithEachConversation() {
@@ -156,6 +181,15 @@ final class ChatUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["startConversation"].waitForExistence(timeout: 10))
         return app
+    }
+
+    private func selectScenario(_ title: String, in app: XCUIApplication) {
+        let picker = app.descendants(matching: .any)["scenarioPicker"].firstMatch
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        picker.tap()
+        let option = app.buttons[title].firstMatch
+        XCTAssertTrue(option.waitForExistence(timeout: 5))
+        option.tap()
     }
 
     private func send(_ text: String, in app: XCUIApplication, expecting prefix: String, replyCount: Int = 1) {

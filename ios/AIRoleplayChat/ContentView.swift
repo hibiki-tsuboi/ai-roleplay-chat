@@ -7,6 +7,9 @@ struct ContentView: View {
     @State private var path: [Conversation] = []
     @State private var errorMessage: String?
     @AppStorage("preferredAIProvider") private var selectedProvider: AIProvider = .gemini
+    @AppStorage("preferredScenarioID") private var selectedScenarioID: String = Scenario.lateReport.id
+
+    private var selectedScenario: Scenario { Scenario.named(selectedScenarioID) ?? .lateReport }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -16,9 +19,25 @@ struct ContentView: View {
                         Label("あなたは上司役です", systemImage: "person.2.bubble")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                        Text(Scenario.lateReport.title)
-                            .font(.title2.bold())
-                        Text(Scenario.lateReport.summary)
+                        // The heading doubles as the picker so the card stays short enough to keep history in view.
+                        Menu {
+                            Picker("練習するシナリオ", selection: $selectedScenarioID) {
+                                ForEach(Scenario.all) { scenario in
+                                    Text(scenario.title).tag(scenario.id)
+                                }
+                            }
+                        } label: {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(selectedScenario.title)
+                                    .font(.title2.bold())
+                                    .multilineTextAlignment(.leading)
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .foregroundStyle(Color.primary)
+                        }
+                        .accessibilityIdentifier("scenarioPicker")
+                        Text(selectedScenario.summary)
                             .foregroundStyle(.secondary)
                         Label("5往復で、あなたの上司度をチェック", systemImage: "flag.checkered")
                             .font(.subheadline.weight(.medium))
@@ -96,7 +115,8 @@ struct ContentView: View {
             }
             .navigationDestination(for: Conversation.self) { conversation in
                 ChatView(conversation: conversation, context: modelContext) {
-                    startConversation(provider: conversation.provider ?? selectedProvider, replacingCurrent: true)
+                    startConversation(scenario: Scenario.named(conversation.scenarioID) ?? selectedScenario,
+                                      provider: conversation.provider ?? selectedProvider, replacingCurrent: true)
                 }
                 .id(conversation.id)
             }
@@ -112,11 +132,11 @@ struct ContentView: View {
     }
 
     private func startConversation() {
-        startConversation(provider: selectedProvider, replacingCurrent: false)
+        startConversation(scenario: selectedScenario, provider: selectedProvider, replacingCurrent: false)
     }
 
-    private func startConversation(provider: AIProvider, replacingCurrent: Bool) {
-        let conversation = Conversation(provider: provider)
+    private func startConversation(scenario: Scenario, provider: AIProvider, replacingCurrent: Bool) {
+        let conversation = Conversation(scenario: scenario, provider: provider)
         modelContext.insert(conversation)
         do {
             try modelContext.save()

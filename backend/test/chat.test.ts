@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker, { type Env } from "../src/index";
-import { maxMessageLength, maxMessages, maxTotalLength, scenarioInstructions } from "../src/chat";
+import { maxMessageLength, maxMessages, maxTotalLength } from "../src/chat";
+import { findScenario, scenarioInstructions } from "../src/scenarios";
 
 const env: Env = { OPENAI_API_KEY: "test-only-key", OPENAI_MODEL: "test-model", APP_ENV: "local" };
+const lateReportInstructions = scenarioInstructions(findScenario("late-report")!);
 const validBody = {
   scenarioId: "late-report",
   messages: [{ role: "user", content: "資料の進み具合を教えてください。" }],
@@ -128,7 +130,7 @@ describe("OpenAI proxy", () => {
     expect(options.headers.Authorization).toBe("Bearer test-only-key");
     expect(JSON.parse(options.body)).toEqual({
       model: "test-model",
-      instructions: scenarioInstructions,
+      instructions: lateReportInstructions,
       input: validBody.messages,
       store: false,
       max_output_tokens: 800,

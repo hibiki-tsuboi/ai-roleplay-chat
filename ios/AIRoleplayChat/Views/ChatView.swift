@@ -77,7 +77,7 @@ struct ChatView: View {
                             .foregroundStyle(.red)
                     }
                     HStack(alignment: .bottom, spacing: 12) {
-                        TextField("田中さんに話しかける", text: $session.draft, axis: .vertical)
+                        TextField("\(session.conversation.characterName)さんに話しかける", text: $session.draft, axis: .vertical)
                             .lineLimit(1...5)
                             .textFieldStyle(.roundedBorder)
                             .disabled(session.isSending)
@@ -114,8 +114,10 @@ struct ChatView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("まずは声をかけてみましょう")
                                 .font(.headline)
-                            Text("たとえば「資料の進み具合を教えてもらえる？」")
-                                .foregroundStyle(.secondary)
+                            if let opener = Scenario.named(session.conversation.scenarioID)?.opener {
+                                Text("たとえば「\(opener)」")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         .padding(.vertical)
                     }
