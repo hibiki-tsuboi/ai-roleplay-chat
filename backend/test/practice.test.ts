@@ -40,6 +40,8 @@ describe.each<AIProvider>(["openai", "gemini"])("five-turn practice with %s", pr
     const body = JSON.parse(fetch.mock.calls[0]![1].body);
     const prompt = provider === "openai" ? body.instructions : body.system_instruction;
     expect(prompt).toContain(`現在は${turn}往復目`);
+    // The turn count steers the reply; it must never be repeated back to the user.
+    expect(prompt).toContain("往復数・残り回数・練習の進め方を返答に書かないでください");
     expect(prompt.includes("これが最後の返答です")).toBe(turn === 5);
     expect(body.input).toHaveLength(history.length);
     expect(body.max_output_tokens ?? body.generation_config.max_output_tokens).toBe(800);

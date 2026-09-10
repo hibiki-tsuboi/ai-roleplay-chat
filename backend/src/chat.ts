@@ -68,7 +68,7 @@ export function chatInstructions(chat: ChatRequest): string {
   const base = scenarioInstructions(chat.scenario);
   if (!chat.practice) return base;
   const turn = (chat.messages.length + 1) / 2;
-  return `${base}\nこの練習は全${practiceTurns}往復で、現在は${turn}往復目の返答です。\n${turn === practiceTurns
+  return `${base}\nこの練習は全${practiceTurns}往復で、現在は${turn}往復目の返答です。これは進行の目安で、往復数・残り回数・練習の進め方を返答に書かないでください。\n${turn === practiceTurns
     ? "これが最後の返答です。上司の発言を受け止め、会話で合意した次の行動があれば短く確認して会話を締めてください。未合意の期限や行動を勝手に作らず、質問や新しい問題で会話を引き延ばさないでください。採点は別の評価者が行います。"
     : "上司が状況を聞き、次の行動を決められるように自然に応じてください。採点の説明はしないでください。"}`;
 }
